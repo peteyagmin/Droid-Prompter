@@ -154,6 +154,20 @@
             android:textColor="@color/text_white"
             android:background="@drawable/button_background"
             android:textSize="@dimen/control_text_size" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="20dp"
+            android:background="@color/divider_color" />
+
+        <Button
+            android:id="@+id/btnExit"
+            style="@style/ControlButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/btn_exit" />
     </LinearLayout>
 
     <View

@@ -103,6 +103,7 @@ public class MainActivity extends Activity {
         Button btnBeginning = (Button) findViewById(R.id.btnBeginning);
         Button btnFontDecrease = (Button) findViewById(R.id.btnFontDecrease);
         Button btnFontIncrease = (Button) findViewById(R.id.btnFontIncrease);
+        Button btnExit = (Button) findViewById(R.id.btnExit);
 
         loadPreferences();
         applyFontSize();
@@ -198,6 +199,14 @@ public class MainActivity extends Activity {
             }
         });
 
+        btnExit.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                exitFullScreenToControls();
+                finish();
+            }
+        });
+
         mirrorToggle.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
@@ -270,7 +279,7 @@ public class MainActivity extends Activity {
             exitFullScreenToControls();
             return;
         }
-        super.onBackPressed();
+        finish();
     }
 
     @Override
@@ -325,6 +334,7 @@ public class MainActivity extends Activity {
             return;
         }
         exitFullScreenToControls();
+        atScriptEnd = false;
         scriptText.setText(result.text);
         loadedFilePath = path;
         updateLoadedFileLabel();
@@ -395,7 +405,11 @@ public class MainActivity extends Activity {
     private void handleScriptTap() {
         switch (uiState) {
             case WAITING_FOR_TAP:
-                startCountdown();
+                if (atScriptEnd) {
+                    exitFullScreenToControls();
+                } else {
+                    startCountdown();
+                }
                 break;
             case COUNTING_DOWN:
                 cancelCountdownToWaiting();
@@ -420,9 +434,35 @@ public class MainActivity extends Activity {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
-        atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
         scriptText.setKeepScreenOn(false);
+        refreshStateVisibility();
+        // atScriptEnd is intentionally left as-is here rather than reset:
+        // the script's scroll position did not change by entering full
+        // screen, so whether it is still at its end is re-checked against
+        // actual geometry once the full-screen layout has settled.
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                recomputeAtScriptEndAfterLayout();
+            }
+        });
+    }
+
+    /**
+     * Re-evaluates atScriptEnd against the actual (now full-screen)
+     * ScrollView geometry after entering WAITING_FOR_TAP, so a script left
+     * scrolled to its end stays marked atScriptEnd, while one the user
+     * manually scrolled away from the end is correctly un-marked. Guarded
+     * on uiState in case the user already moved on by the time this
+     * deferred check runs.
+     */
+    private void recomputeAtScriptEndAfterLayout() {
+        if (uiState != UiState.WAITING_FOR_TAP) {
+            return;
+        }
+        int maxScroll = scriptText.getHeight() - scrollView.getHeight();
+        atScriptEnd = maxScroll > 0 && scrollView.getScrollY() >= maxScroll;
         refreshStateVisibility();
     }
 
