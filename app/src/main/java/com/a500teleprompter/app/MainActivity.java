@@ -46,6 +46,9 @@ public class MainActivity extends Activity {
     private static final int COUNTDOWN_START_VALUE = 5;
     private static final long COUNTDOWN_INTERVAL_MS = 1000;
 
+    private static final float OPENING_SPACE_FRACTION = 0.775f;
+    private static final float SCRIPT_PADDING_DP = 24f;
+
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
     private static final String STATE_SCROLL_Y = "state_scroll_y";
     private static final String STATE_LOADED_FILE_PATH = "state_loaded_file_path";
@@ -54,6 +57,7 @@ public class MainActivity extends Activity {
     private ScrollView scrollView;
     private TextView scriptText;
     private TextView countdownText;
+    private TextView tapInstructionText;
     private TextView currentFileLabel;
     private TextView fontSizeLabel;
     private TextView speedLabel;
@@ -67,6 +71,7 @@ public class MainActivity extends Activity {
     private GestureDetector tapDetector;
 
     private UiState uiState = UiState.CONTROLS;
+    private boolean atScriptEnd = false;
     private int countdownRemaining;
     private int scrollSpeed = DEFAULT_SPEED;
     private float fontSizeSp = DEFAULT_FONT_SIZE_SP;
@@ -85,6 +90,7 @@ public class MainActivity extends Activity {
         scrollView = (ScrollView) findViewById(R.id.scrollView);
         scriptText = (TextView) findViewById(R.id.scriptText);
         countdownText = (TextView) findViewById(R.id.countdownText);
+        tapInstructionText = (TextView) findViewById(R.id.tapInstructionText);
         currentFileLabel = (TextView) findViewById(R.id.currentFileLabel);
         fontSizeLabel = (TextView) findViewById(R.id.fontSizeLabel);
         speedLabel = (TextView) findViewById(R.id.speedLabel);
@@ -106,6 +112,8 @@ public class MainActivity extends Activity {
         speedSeekBar.setMax(MAX_SPEED - MIN_SPEED);
         speedSeekBar.setProgress(scrollSpeed - MIN_SPEED);
         updateSpeedLabel();
+
+        scheduleOpeningPaddingComputation();
 
         if (savedInstanceState != null) {
             CharSequence savedText = savedInstanceState.getCharSequence(STATE_SCRIPT_TEXT);
@@ -329,6 +337,44 @@ public class MainActivity extends Activity {
         });
     }
 
+    /**
+     * The visible script area is not measured yet during onCreate(), so the
+     * opening-space calculation is deferred to a post() callback, which
+     * runs after the first layout pass.
+     */
+    private void scheduleOpeningPaddingComputation() {
+        final View contentRoot = findViewById(android.R.id.content);
+        contentRoot.post(new Runnable() {
+            @Override
+            public void run() {
+                computeAndApplyOpeningPadding(contentRoot.getHeight());
+            }
+        });
+    }
+
+    /**
+     * Pads the top of scriptText so the first line of a freshly loaded
+     * script (scrollY == 0) initially sits about 75-80% of the way down
+     * the visible teleprompter area, leaving room for it to scroll
+     * naturally upward. The padding is part of scriptText's own content,
+     * so it scrolls with the script rather than staying fixed on screen,
+     * and it is independent of scriptText's horizontal mirror scaleX.
+     */
+    private void computeAndApplyOpeningPadding(int visibleAreaHeightPx) {
+        if (visibleAreaHeightPx <= 0) {
+            return;
+        }
+        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        int topPaddingPx = Math.max(sidePaddingPx,
+                Math.round(visibleAreaHeightPx * OPENING_SPACE_FRACTION));
+        scriptText.setPadding(sidePaddingPx, topPaddingPx, sidePaddingPx, sidePaddingPx);
+    }
+
+    private int dpToPx(float dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return Math.round(dp * density);
+    }
+
     private void updateLoadedFileLabel() {
         if (loadedFilePath != null) {
             currentFileLabel.setText(getString(R.string.loaded_file_label,
@@ -374,10 +420,10 @@ public class MainActivity extends Activity {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
+        atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
-        countdownText.setVisibility(View.GONE);
         scriptText.setKeepScreenOn(false);
-        controlsPanel.setVisibility(View.GONE);
+        refreshStateVisibility();
     }
 
     private void startCountdown() {
@@ -387,8 +433,8 @@ public class MainActivity extends Activity {
         scrollHandler.removeCallbacksAndMessages(null);
         uiState = UiState.COUNTING_DOWN;
         countdownRemaining = COUNTDOWN_START_VALUE;
-        countdownText.setVisibility(View.VISIBLE);
         scriptText.setKeepScreenOn(true);
+        refreshStateVisibility();
         scrollHandler.post(countdownRunnable);
     }
 
@@ -397,7 +443,6 @@ public class MainActivity extends Activity {
             return;
         }
         if (countdownRemaining <= 0) {
-            countdownText.setVisibility(View.GONE);
             beginActiveScrolling();
             return;
         }
@@ -411,15 +456,16 @@ public class MainActivity extends Activity {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
-        countdownText.setVisibility(View.GONE);
         scriptText.setKeepScreenOn(false);
         uiState = UiState.WAITING_FOR_TAP;
+        refreshStateVisibility();
     }
 
     private void beginActiveScrolling() {
         scrollHandler.removeCallbacksAndMessages(null);
         uiState = UiState.SCROLLING;
         scriptText.setKeepScreenOn(true);
+        refreshStateVisibility();
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
 
@@ -431,17 +477,17 @@ public class MainActivity extends Activity {
      */
     private void exitFullScreenToControls() {
         scrollHandler.removeCallbacksAndMessages(null);
-        countdownText.setVisibility(View.GONE);
         scriptText.setKeepScreenOn(false);
         uiState = UiState.CONTROLS;
-        controlsPanel.setVisibility(View.VISIBLE);
+        refreshStateVisibility();
     }
 
     private void returnToBeginning() {
         scrollHandler.removeCallbacksAndMessages(null);
-        countdownText.setVisibility(View.GONE);
         scriptText.setKeepScreenOn(false);
+        atScriptEnd = false;
         uiState = UiState.CONTROLS;
+        refreshStateVisibility();
         scrollView.scrollTo(0, 0);
     }
 
@@ -467,12 +513,29 @@ public class MainActivity extends Activity {
     /**
      * The script reached its end during active scrolling: stop, but stay
      * in full-screen mode (waiting for a tap) rather than forcing the user
-     * back to the controls screen.
+     * back to the controls screen. "Tap to Start" is suppressed in this
+     * flavor of WAITING_FOR_TAP since there is no more content to scroll.
      */
     private void stopScrollingAtEnd() {
         scrollHandler.removeCallbacksAndMessages(null);
         scriptText.setKeepScreenOn(false);
+        atScriptEnd = true;
         uiState = UiState.WAITING_FOR_TAP;
+        refreshStateVisibility();
+    }
+
+    /**
+     * Single source of truth for what the countdown, "Tap to Start", and
+     * controls overlays show, driven entirely by uiState (and atScriptEnd
+     * for the one WAITING_FOR_TAP special case). Called at the end of
+     * every state transition so the three overlays can never drift out of
+     * sync with each other.
+     */
+    private void refreshStateVisibility() {
+        controlsPanel.setVisibility(uiState == UiState.CONTROLS ? View.VISIBLE : View.GONE);
+        countdownText.setVisibility(uiState == UiState.COUNTING_DOWN ? View.VISIBLE : View.GONE);
+        boolean showTapInstruction = uiState == UiState.WAITING_FOR_TAP && !atScriptEnd;
+        tapInstructionText.setVisibility(showTapInstruction ? View.VISIBLE : View.GONE);
     }
 
     private int computeScrollPixelsPerTick() {
@@ -497,6 +560,7 @@ public class MainActivity extends Activity {
         float scaleX = mirrorEnabled ? -1f : 1f;
         scriptText.setScaleX(scaleX);
         countdownText.setScaleX(scaleX);
+        tapInstructionText.setScaleX(scaleX);
     }
 
     private static float clamp(float value, float min, float max) {
