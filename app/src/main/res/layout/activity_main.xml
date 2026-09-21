@@ -13,6 +13,7 @@
         android:background="@color/background_black"
         android:padding="@dimen/control_padding">
 
+        <!-- Top file row: [ Load Script ]  Loaded: filename  [ Return to Top ] -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -31,52 +32,28 @@
                 android:id="@+id/currentFileLabel"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1.4"
+                android:layout_weight="2"
                 android:layout_marginLeft="12dp"
                 android:layout_marginStart="12dp"
+                android:layout_marginRight="12dp"
+                android:layout_marginEnd="12dp"
                 android:text="@string/no_file_loaded"
                 android:textColor="@color/text_light_gray"
                 android:textSize="16sp"
-                android:gravity="center_vertical"
+                android:gravity="center"
                 android:maxLines="1"
                 android:ellipsize="middle" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="12dp">
-
-            <Button
-                android:id="@+id/btnStart"
-                style="@style/ControlButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginRight="8dp"
-                android:layout_marginEnd="8dp"
-                android:text="@string/btn_start" />
-
-            <Button
-                android:id="@+id/btnPause"
-                style="@style/ControlButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginRight="8dp"
-                android:layout_marginEnd="8dp"
-                android:text="@string/btn_pause" />
 
             <Button
                 android:id="@+id/btnBeginning"
-                style="@style/ControlButton"
+                style="@style/SecondaryControlButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="@string/btn_beginning" />
         </LinearLayout>
 
+        <!-- Primary action row: Enter Prompter (dominant) + Mirror + Exit -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -85,32 +62,36 @@
             android:gravity="center_vertical">
 
             <Button
-                android:id="@+id/btnFontDecrease"
+                android:id="@+id/btnStart"
                 style="@style/ControlButton"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minWidth="64dp"
-                android:text="@string/btn_font_decrease" />
+                android:layout_weight="3"
+                android:layout_marginRight="8dp"
+                android:layout_marginEnd="8dp"
+                android:text="@string/btn_start" />
 
-            <TextView
-                android:id="@+id/fontSizeLabel"
+            <ToggleButton
+                android:id="@+id/mirrorToggle"
+                style="@style/SecondaryControlButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:gravity="center"
-                android:textColor="@color/text_white"
-                android:textSize="18sp"
-                android:text="@string/font_size_default_label" />
+                android:layout_marginRight="8dp"
+                android:layout_marginEnd="8dp"
+                android:textOn="@string/mirror_on"
+                android:textOff="@string/mirror_off" />
 
             <Button
-                android:id="@+id/btnFontIncrease"
-                style="@style/ControlButton"
-                android:layout_width="wrap_content"
+                android:id="@+id/btnExit"
+                style="@style/SecondaryControlButton"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minWidth="64dp"
-                android:text="@string/btn_font_increase" />
+                android:layout_weight="1"
+                android:text="@string/btn_exit" />
         </LinearLayout>
 
+        <!-- Font size + speed row, separated by a subtle vertical divider -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -118,56 +99,101 @@
             android:layout_marginTop="12dp"
             android:gravity="center_vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/speed_prefix"
-                android:textColor="@color/text_white"
-                android:textSize="18sp" />
-
-            <TextView
-                android:id="@+id/speedLabel"
-                android:layout_width="48dp"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textColor="@color/accent_amber"
-                android:textSize="18sp"
-                android:text="@string/speed_default_label" />
-
-            <SeekBar
-                android:id="@+id/speedSeekBar"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginLeft="8dp"
-                android:layout_marginStart="8dp" />
+                android:layout_weight="38"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginRight="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/font_size_static_label"
+                    android:textColor="@color/text_white"
+                    android:textSize="16sp" />
+
+                <Button
+                    android:id="@+id/btnFontDecrease"
+                    style="@style/ControlButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="56dp"
+                    android:text="@string/btn_font_decrease" />
+
+                <TextView
+                    android:id="@+id/fontSizeLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="6dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginRight="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:minWidth="40dp"
+                    android:gravity="center"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="18sp"
+                    android:text="@string/font_size_default_label" />
+
+                <Button
+                    android:id="@+id/btnFontIncrease"
+                    style="@style/ControlButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="56dp"
+                    android:text="@string/btn_font_increase" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="@dimen/adjustment_divider_width"
+                android:layout_height="match_parent"
+                android:layout_marginLeft="12dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginRight="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginTop="@dimen/adjustment_divider_vertical_margin"
+                android:layout_marginBottom="@dimen/adjustment_divider_vertical_margin"
+                android:background="@color/divider_color"
+                android:clickable="false"
+                android:focusable="false" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="59"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/speed_prefix"
+                    android:textColor="@color/text_white"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:id="@+id/speedLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="32dp"
+                    android:layout_marginLeft="4dp"
+                    android:layout_marginStart="4dp"
+                    android:gravity="center"
+                    android:textColor="@color/accent_amber"
+                    android:textSize="18sp"
+                    android:text="@string/speed_default_label" />
+
+                <SeekBar
+                    android:id="@+id/speedSeekBar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginLeft="12dp"
+                    android:layout_marginStart="12dp" />
+            </LinearLayout>
         </LinearLayout>
-
-        <ToggleButton
-            android:id="@+id/mirrorToggle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:minHeight="@dimen/control_button_height"
-            android:textOn="@string/mirror_on"
-            android:textOff="@string/mirror_off"
-            android:textColor="@color/text_white"
-            android:background="@drawable/button_background"
-            android:textSize="@dimen/control_text_size" />
-
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="20dp"
-            android:background="@color/divider_color" />
-
-        <Button
-            android:id="@+id/btnExit"
-            style="@style/ControlButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="@string/btn_exit" />
     </LinearLayout>
 
     <View

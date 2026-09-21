@@ -99,7 +99,6 @@ public class MainActivity extends Activity {
 
         Button btnOpenFile = (Button) findViewById(R.id.btnOpenFile);
         Button btnStart = (Button) findViewById(R.id.btnStart);
-        Button btnPause = (Button) findViewById(R.id.btnPause);
         Button btnBeginning = (Button) findViewById(R.id.btnBeginning);
         Button btnFontDecrease = (Button) findViewById(R.id.btnFontDecrease);
         Button btnFontIncrease = (Button) findViewById(R.id.btnFontIncrease);
@@ -168,13 +167,6 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 enterFullScreenWaitingFromControls();
-            }
-        });
-
-        btnPause.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                exitFullScreenToControls();
             }
         });
 
