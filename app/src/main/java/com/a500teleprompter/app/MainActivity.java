@@ -494,7 +494,9 @@ public class MainActivity extends Activity {
     }
 
     private void applyMirror() {
-        scriptText.setScaleX(mirrorEnabled ? -1f : 1f);
+        float scaleX = mirrorEnabled ? -1f : 1f;
+        scriptText.setScaleX(scaleX);
+        countdownText.setScaleX(scaleX);
     }
 
     private static float clamp(float value, float min, float max) {
