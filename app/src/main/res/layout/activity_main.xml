@@ -161,24 +161,48 @@
         android:layout_height="1dp"
         android:background="@color/divider_color" />
 
-    <ScrollView
-        android:id="@+id/scrollView"
+    <FrameLayout
+        android:id="@+id/fullScreenContainer"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="@color/background_black"
-        android:scrollbars="none"
-        android:fillViewport="true">
+        android:background="@color/background_black">
+
+        <ScrollView
+            android:id="@+id/scrollView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/background_black"
+            android:scrollbars="none"
+            android:fillViewport="true">
+
+            <TextView
+                android:id="@+id/scriptText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="24dp"
+                android:textColor="@color/text_white"
+                android:textSize="@dimen/script_default_text_size"
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/default_script_placeholder" />
+        </ScrollView>
 
         <TextView
-            android:id="@+id/scriptText"
-            android:layout_width="match_parent"
+            android:id="@+id/countdownText"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:padding="24dp"
+            android:layout_gravity="center"
+            android:visibility="gone"
+            android:background="@drawable/countdown_background"
+            android:paddingLeft="48dp"
+            android:paddingRight="48dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:gravity="center"
             android:textColor="@color/text_white"
-            android:textSize="@dimen/script_default_text_size"
-            android:lineSpacingMultiplier="1.2"
-            android:text="@string/default_script_placeholder" />
-    </ScrollView>
+            android:textStyle="bold"
+            android:textSize="@dimen/countdown_text_size" />
+
+    </FrameLayout>
 
 </LinearLayout>

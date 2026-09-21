@@ -5,4 +5,5 @@
     <dimen name="control_text_size">20sp</dimen>
     <dimen name="script_default_text_size">32sp</dimen>
     <dimen name="list_item_min_height">56dp</dimen>
+    <dimen name="countdown_text_size">140sp</dimen>
 </resources>

@@ -20,6 +20,17 @@ import java.io.File;
 
 public class MainActivity extends Activity {
 
+    /**
+     * The four teleprompter states. Exactly one tap-driven transition is
+     * allowed out of any given state; see {@link #handleScriptTap()}.
+     */
+    private enum UiState {
+        CONTROLS,
+        WAITING_FOR_TAP,
+        COUNTING_DOWN,
+        SCROLLING
+    }
+
     private static final int REQUEST_CODE_BROWSE_FILE = 100;
 
     private static final float MIN_FONT_SIZE_SP = 14f;
@@ -32,6 +43,9 @@ public class MainActivity extends Activity {
     private static final int DEFAULT_SPEED = 5;
     private static final long SCROLL_INTERVAL_MS = 50;
 
+    private static final int COUNTDOWN_START_VALUE = 5;
+    private static final long COUNTDOWN_INTERVAL_MS = 1000;
+
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
     private static final String STATE_SCROLL_Y = "state_scroll_y";
     private static final String STATE_LOADED_FILE_PATH = "state_loaded_file_path";
@@ -39,6 +53,7 @@ public class MainActivity extends Activity {
     private View controlsPanel;
     private ScrollView scrollView;
     private TextView scriptText;
+    private TextView countdownText;
     private TextView currentFileLabel;
     private TextView fontSizeLabel;
     private TextView speedLabel;
@@ -48,9 +63,11 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final Handler scrollHandler = new Handler();
     private Runnable scrollRunnable;
+    private Runnable countdownRunnable;
     private GestureDetector tapDetector;
 
-    private boolean isScrolling = false;
+    private UiState uiState = UiState.CONTROLS;
+    private int countdownRemaining;
     private int scrollSpeed = DEFAULT_SPEED;
     private float fontSizeSp = DEFAULT_FONT_SIZE_SP;
     private boolean mirrorEnabled = false;
@@ -67,6 +84,7 @@ public class MainActivity extends Activity {
         controlsPanel = findViewById(R.id.controlsPanel);
         scrollView = (ScrollView) findViewById(R.id.scrollView);
         scriptText = (TextView) findViewById(R.id.scriptText);
+        countdownText = (TextView) findViewById(R.id.countdownText);
         currentFileLabel = (TextView) findViewById(R.id.currentFileLabel);
         fontSizeLabel = (TextView) findViewById(R.id.fontSizeLabel);
         speedLabel = (TextView) findViewById(R.id.speedLabel);
@@ -107,11 +125,17 @@ public class MainActivity extends Activity {
                 performScrollTick();
             }
         };
+        countdownRunnable = new Runnable() {
+            @Override
+            public void run() {
+                performCountdownTick();
+            }
+        };
 
         tapDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapUp(MotionEvent e) {
-                toggleControlsVisibility();
+                handleScriptTap();
                 return true;
             }
         });
@@ -134,14 +158,14 @@ public class MainActivity extends Activity {
         btnStart.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                startScrolling();
+                enterFullScreenWaitingFromControls();
             }
         });
 
         btnPause.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pauseScrolling();
+                exitFullScreenToControls();
             }
         });
 
@@ -213,9 +237,32 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        // Auto-scrolling must not continue while the activity is backgrounded.
-        pauseScrolling();
+        // The activity is being backgrounded: always land back on the
+        // controls screen so nothing keeps counting down or scrolling
+        // while the app is not visible.
+        exitFullScreenToControls();
         savePreferences();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        scrollHandler.removeCallbacksAndMessages(null);
+    }
+
+    @Override
+    protected void onDestroy() {
+        scrollHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (uiState != UiState.CONTROLS) {
+            exitFullScreenToControls();
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override
@@ -269,7 +316,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, result.errorMessage, Toast.LENGTH_LONG).show();
             return;
         }
-        pauseScrolling();
+        exitFullScreenToControls();
         scriptText.setText(result.text);
         loadedFilePath = path;
         updateLoadedFileLabel();
@@ -295,56 +342,137 @@ public class MainActivity extends Activity {
         speedLabel.setText(getString(R.string.speed_label, scrollSpeed));
     }
 
-    private void toggleControlsVisibility() {
-        if (controlsPanel.getVisibility() == View.VISIBLE) {
-            controlsPanel.setVisibility(View.GONE);
-        } else {
-            controlsPanel.setVisibility(View.VISIBLE);
+    /**
+     * Routes a single tap on the script area to exactly one state
+     * transition, based on the state the app is in right now.
+     */
+    private void handleScriptTap() {
+        switch (uiState) {
+            case WAITING_FOR_TAP:
+                startCountdown();
+                break;
+            case COUNTING_DOWN:
+                cancelCountdownToWaiting();
+                break;
+            case SCROLLING:
+                exitFullScreenToControls();
+                break;
+            case CONTROLS:
+            default:
+                // Controls are already visible; a tap on the script area
+                // (only reachable by scrolling it manually) is a no-op.
+                break;
         }
     }
 
-    private void startScrolling() {
+    private void enterFullScreenWaitingFromControls() {
+        if (uiState != UiState.CONTROLS) {
+            return;
+        }
         if (scriptText.getText() == null || scriptText.getText().length() == 0) {
             Toast.makeText(this, R.string.no_script_loaded, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (isScrolling) {
+        scrollHandler.removeCallbacksAndMessages(null);
+        uiState = UiState.WAITING_FOR_TAP;
+        countdownText.setVisibility(View.GONE);
+        scriptText.setKeepScreenOn(false);
+        controlsPanel.setVisibility(View.GONE);
+    }
+
+    private void startCountdown() {
+        if (uiState != UiState.WAITING_FOR_TAP) {
             return;
         }
-        isScrolling = true;
+        scrollHandler.removeCallbacksAndMessages(null);
+        uiState = UiState.COUNTING_DOWN;
+        countdownRemaining = COUNTDOWN_START_VALUE;
+        countdownText.setVisibility(View.VISIBLE);
         scriptText.setKeepScreenOn(true);
-        controlsPanel.setVisibility(View.GONE);
+        scrollHandler.post(countdownRunnable);
+    }
+
+    private void performCountdownTick() {
+        if (uiState != UiState.COUNTING_DOWN) {
+            return;
+        }
+        if (countdownRemaining <= 0) {
+            countdownText.setVisibility(View.GONE);
+            beginActiveScrolling();
+            return;
+        }
+        countdownText.setText(String.valueOf(countdownRemaining));
+        countdownRemaining--;
+        scrollHandler.postDelayed(countdownRunnable, COUNTDOWN_INTERVAL_MS);
+    }
+
+    private void cancelCountdownToWaiting() {
+        if (uiState != UiState.COUNTING_DOWN) {
+            return;
+        }
+        scrollHandler.removeCallbacksAndMessages(null);
+        countdownText.setVisibility(View.GONE);
+        scriptText.setKeepScreenOn(false);
+        uiState = UiState.WAITING_FOR_TAP;
+    }
+
+    private void beginActiveScrolling() {
+        scrollHandler.removeCallbacksAndMessages(null);
+        uiState = UiState.SCROLLING;
+        scriptText.setKeepScreenOn(true);
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
 
-    private void pauseScrolling() {
-        isScrolling = false;
-        scrollHandler.removeCallbacks(scrollRunnable);
+    /**
+     * Leaves full-screen mode from any state (waiting, counting down, or
+     * scrolling) and returns to the controls screen, canceling any pending
+     * countdown/scroll callbacks and preserving the current scroll
+     * position. Safe to call when already on the controls screen.
+     */
+    private void exitFullScreenToControls() {
+        scrollHandler.removeCallbacksAndMessages(null);
+        countdownText.setVisibility(View.GONE);
         scriptText.setKeepScreenOn(false);
+        uiState = UiState.CONTROLS;
+        controlsPanel.setVisibility(View.VISIBLE);
     }
 
     private void returnToBeginning() {
-        pauseScrolling();
+        scrollHandler.removeCallbacksAndMessages(null);
+        countdownText.setVisibility(View.GONE);
+        scriptText.setKeepScreenOn(false);
+        uiState = UiState.CONTROLS;
         scrollView.scrollTo(0, 0);
     }
 
     private void performScrollTick() {
-        if (!isScrolling) {
+        if (uiState != UiState.SCROLLING) {
             return;
         }
         int maxScroll = scriptText.getHeight() - scrollView.getHeight();
         if (maxScroll <= 0) {
-            pauseScrolling();
+            stopScrollingAtEnd();
             return;
         }
         int newY = scrollView.getScrollY() + computeScrollPixelsPerTick();
         if (newY >= maxScroll) {
             scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
-            pauseScrolling();
+            stopScrollingAtEnd();
             return;
         }
         scrollView.scrollTo(scrollView.getScrollX(), newY);
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
+    }
+
+    /**
+     * The script reached its end during active scrolling: stop, but stay
+     * in full-screen mode (waiting for a tap) rather than forcing the user
+     * back to the controls screen.
+     */
+    private void stopScrollingAtEnd() {
+        scrollHandler.removeCallbacksAndMessages(null);
+        scriptText.setKeepScreenOn(false);
+        uiState = UiState.WAITING_FOR_TAP;
     }
 
     private int computeScrollPixelsPerTick() {
