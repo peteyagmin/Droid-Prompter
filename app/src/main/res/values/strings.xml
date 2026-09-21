@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">A500 Teleprompter</string>
+    <string name="file_browser_title">Choose Script File</string>
+
+    <!-- Main screen -->
+    <string name="btn_open_file">Open File</string>
+    <string name="no_file_loaded">No file loaded</string>
+    <string name="loaded_file_label">Loaded: %1$s</string>
+    <string name="btn_start">Start</string>
+    <string name="btn_pause">Pause</string>
+    <string name="btn_beginning">Beginning</string>
+    <string name="btn_font_decrease">A-</string>
+    <string name="btn_font_increase">A+</string>
+    <string name="font_size_default_label">Font: 32</string>
+    <string name="font_size_label">Font: %1$d</string>
+    <string name="speed_prefix">Speed:</string>
+    <string name="speed_default_label">5</string>
+    <string name="speed_label">%1$d</string>
+    <string name="mirror_on">Mirror: On</string>
+    <string name="mirror_off">Mirror: Off</string>
+    <string name="default_script_placeholder">Tap \"Open File\" to load a script (.txt).</string>
+    <string name="no_script_loaded">Load a script before starting.</string>
+
+    <!-- File browser -->
+    <string name="path_placeholder">/</string>
+    <string name="btn_up">Up</string>
+    <string name="btn_teleprompter_folder">Teleprompter Folder</string>
+    <string name="btn_storage">Storage</string>
+    <string name="no_selection">No file selected</string>
+    <string name="selected_file_label">Selected: %1$s</string>
+    <string name="btn_cancel">Cancel</string>
+    <string name="btn_open">Open</string>
+    <string name="folder_cannot_be_accessed">This folder cannot be accessed.</string>
+    <string name="folder_is_empty">This folder is empty.</string>
+    <string name="no_text_files">This folder contains no text files.</string>
+    <string name="teleprompter_folder_unavailable">The Teleprompter folder is not available.</string>
+    <string name="choose_storage_title">Choose a storage location</string>
+    <string name="select_file_first">Select a .txt file first.</string>
+    <string name="file_cannot_be_opened">This file cannot be opened.</string>
+    <string name="file_is_empty_message">This file is empty.</string>
+    <string name="file_too_large">This file is too large (2 MB limit).</string>
+</resources>

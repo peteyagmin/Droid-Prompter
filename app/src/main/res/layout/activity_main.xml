@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_black">
+
+    <LinearLayout
+        android:id="@+id/controlsPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@color/background_black"
+        android:padding="@dimen/control_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnOpenFile"
+                style="@style/ControlButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_open_file" />
+
+            <TextView
+                android:id="@+id/currentFileLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.4"
+                android:layout_marginLeft="12dp"
+                android:layout_marginStart="12dp"
+                android:text="@string/no_file_loaded"
+                android:textColor="@color/text_light_gray"
+                android:textSize="16sp"
+                android:gravity="center_vertical"
+                android:maxLines="1"
+                android:ellipsize="middle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp">
+
+            <Button
+                android:id="@+id/btnStart"
+                style="@style/ControlButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginRight="8dp"
+                android:layout_marginEnd="8dp"
+                android:text="@string/btn_start" />
+
+            <Button
+                android:id="@+id/btnPause"
+                style="@style/ControlButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginRight="8dp"
+                android:layout_marginEnd="8dp"
+                android:text="@string/btn_pause" />
+
+            <Button
+                android:id="@+id/btnBeginning"
+                style="@style/ControlButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/btn_beginning" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btnFontDecrease"
+                style="@style/ControlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:text="@string/btn_font_decrease" />
+
+            <TextView
+                android:id="@+id/fontSizeLabel"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:textColor="@color/text_white"
+                android:textSize="18sp"
+                android:text="@string/font_size_default_label" />
+
+            <Button
+                android:id="@+id/btnFontIncrease"
+                style="@style/ControlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="64dp"
+                android:text="@string/btn_font_increase" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/speed_prefix"
+                android:textColor="@color/text_white"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/speedLabel"
+                android:layout_width="48dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="@color/accent_amber"
+                android:textSize="18sp"
+                android:text="@string/speed_default_label" />
+
+            <SeekBar
+                android:id="@+id/speedSeekBar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="8dp"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <ToggleButton
+            android:id="@+id/mirrorToggle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:minHeight="@dimen/control_button_height"
+            android:textOn="@string/mirror_on"
+            android:textOff="@string/mirror_off"
+            android:textColor="@color/text_white"
+            android:background="@drawable/button_background"
+            android:textSize="@dimen/control_text_size" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/divider_color" />
+
+    <ScrollView
+        android:id="@+id/scrollView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="@color/background_black"
+        android:scrollbars="none"
+        android:fillViewport="true">
+
+        <TextView
+            android:id="@+id/scriptText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="24dp"
+            android:textColor="@color/text_white"
+            android:textSize="@dimen/script_default_text_size"
+            android:lineSpacingMultiplier="1.2"
+            android:text="@string/default_script_placeholder" />
+    </ScrollView>
+
+</LinearLayout>

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background_black"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/currentPathText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_light_gray"
+        android:textSize="14sp"
+        android:maxLines="2"
+        android:ellipsize="start"
+        android:text="@string/path_placeholder" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnUp"
+            style="@style/ControlButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginRight="6dp"
+            android:layout_marginEnd="6dp"
+            android:text="@string/btn_up" />
+
+        <Button
+            android:id="@+id/btnTeleprompterFolder"
+            style="@style/ControlButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.3"
+            android:layout_marginRight="6dp"
+            android:layout_marginEnd="6dp"
+            android:text="@string/btn_teleprompter_folder" />
+
+        <Button
+            android:id="@+id/btnStorage"
+            style="@style/ControlButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/btn_storage" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/emptyMessageText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:textColor="@color/text_light_gray"
+        android:textSize="18sp"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/fileListView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:divider="@color/divider_color"
+        android:dividerHeight="1dp" />
+
+    <TextView
+        android:id="@+id/selectedFileText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/accent_amber"
+        android:textSize="16sp"
+        android:text="@string/no_selection" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <Button
+            android:id="@+id/btnCancel"
+            style="@style/ControlButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginRight="8dp"
+            android:layout_marginEnd="8dp"
+            android:text="@string/btn_cancel" />
+
+        <Button
+            android:id="@+id/btnOpen"
+            style="@style/ControlButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:enabled="false"
+            android:text="@string/btn_open" />
+    </LinearLayout>
+
+</LinearLayout>

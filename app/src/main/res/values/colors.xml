@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_black">#FF000000</color>
+    <color name="text_white">#FFFFFFFF</color>
+    <color name="text_light_gray">#FFCCCCCC</color>
+    <color name="accent_amber">#FFFFC107</color>
+    <color name="button_normal">#FF2A2A2A</color>
+    <color name="button_pressed">#FF444444</color>
+    <color name="directory_color">#FF6FC3FF</color>
+    <color name="file_color">#FFFFFFFF</color>
+    <color name="divider_color">#FF333333</color>
+</resources>
