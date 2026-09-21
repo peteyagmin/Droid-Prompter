@@ -21,6 +21,8 @@
     <string name="speed_label">%1$d</string>
     <string name="mirror_on">Mirror: On</string>
     <string name="mirror_off">Mirror: Off</string>
+    <string name="btn_preview">Preview</string>
+    <string name="btn_stop_preview">Stop</string>
     <string name="default_script_placeholder">Load a script to begin</string>
     <string name="no_script_loaded">Load a script before starting.</string>
 

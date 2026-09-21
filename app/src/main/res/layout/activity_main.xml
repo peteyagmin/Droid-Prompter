@@ -26,6 +26,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:textSize="@dimen/secondary_text_size"
                 android:text="@string/btn_open_file" />
 
             <TextView
@@ -69,6 +70,7 @@
                 android:layout_weight="3"
                 android:layout_marginRight="8dp"
                 android:layout_marginEnd="8dp"
+                android:textSize="@dimen/secondary_text_size"
                 android:text="@string/btn_start" />
 
             <ToggleButton
@@ -191,7 +193,17 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:layout_marginLeft="12dp"
-                    android:layout_marginStart="12dp" />
+                    android:layout_marginStart="12dp"
+                    android:layout_marginRight="8dp"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnPreview"
+                    style="@style/SecondaryControlButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="96dp"
+                    android:text="@string/btn_preview" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
@@ -220,9 +232,7 @@
                 android:id="@+id/scriptText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingLeft="24dp"
-                android:paddingRight="24dp"
-                android:paddingBottom="24dp"
+                android:padding="24dp"
                 android:textColor="@color/text_white"
                 android:textSize="@dimen/script_default_text_size"
                 android:lineSpacingMultiplier="1.2"

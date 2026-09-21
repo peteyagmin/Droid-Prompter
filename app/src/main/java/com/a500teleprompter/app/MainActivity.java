@@ -63,15 +63,18 @@ public class MainActivity extends Activity {
     private TextView speedLabel;
     private SeekBar speedSeekBar;
     private ToggleButton mirrorToggle;
+    private Button btnPreview;
 
     private SharedPreferences prefs;
     private final Handler scrollHandler = new Handler();
     private Runnable scrollRunnable;
     private Runnable countdownRunnable;
+    private Runnable previewScrollRunnable;
     private GestureDetector tapDetector;
 
     private UiState uiState = UiState.CONTROLS;
     private boolean atScriptEnd = false;
+    private boolean previewScrolling = false;
     private int countdownRemaining;
     private int scrollSpeed = DEFAULT_SPEED;
     private float fontSizeSp = DEFAULT_FONT_SIZE_SP;
@@ -96,6 +99,7 @@ public class MainActivity extends Activity {
         speedLabel = (TextView) findViewById(R.id.speedLabel);
         speedSeekBar = (SeekBar) findViewById(R.id.speedSeekBar);
         mirrorToggle = (ToggleButton) findViewById(R.id.mirrorToggle);
+        btnPreview = (Button) findViewById(R.id.btnPreview);
 
         Button btnOpenFile = (Button) findViewById(R.id.btnOpenFile);
         Button btnStart = (Button) findViewById(R.id.btnStart);
@@ -112,8 +116,6 @@ public class MainActivity extends Activity {
         speedSeekBar.setMax(MAX_SPEED - MIN_SPEED);
         speedSeekBar.setProgress(scrollSpeed - MIN_SPEED);
         updateSpeedLabel();
-
-        scheduleOpeningPaddingComputation();
 
         if (savedInstanceState != null) {
             CharSequence savedText = savedInstanceState.getCharSequence(STATE_SCRIPT_TEXT);
@@ -137,6 +139,12 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 performCountdownTick();
+            }
+        };
+        previewScrollRunnable = new Runnable() {
+            @Override
+            public void run() {
+                performPreviewScrollTick();
             }
         };
 
@@ -196,6 +204,13 @@ public class MainActivity extends Activity {
             public void onClick(View v) {
                 exitFullScreenToControls();
                 finish();
+            }
+        });
+
+        btnPreview.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                togglePreviewScrolling();
             }
         });
 
@@ -340,36 +355,43 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The visible script area is not measured yet during onCreate(), so the
-     * opening-space calculation is deferred to a post() callback, which
-     * runs after the first layout pass.
+     * Centralized script-padding switch used whenever uiState crosses the
+     * CONTROLS / full-screen boundary. scriptText's XML default (uniform
+     * 24dp padding) is exactly right for CONTROLS, so this is only ever
+     * called from the two transition methods, never from onCreate().
+     *
+     * If the script is already at its very start (scrollY == 0), the new
+     * padding is applied and scrollY is left at 0: that alone produces the
+     * correct per-mode look (first line near the top in CONTROLS, first
+     * line ~77.5% down in full screen) with no scroll adjustment needed.
+     * Otherwise scrollY is shifted by the padding delta, then clamped once
+     * the padding change has actually been laid out, so the same
+     * approximate passage of text stays on screen instead of jumping to a
+     * different part of the script.
      */
-    private void scheduleOpeningPaddingComputation() {
-        final View contentRoot = findViewById(android.R.id.content);
-        contentRoot.post(new Runnable() {
+    private void switchTopPaddingPreservingPosition(final int newTopPaddingPx, final Runnable afterSettled) {
+        final int oldTopPaddingPx = scriptText.getPaddingTop();
+        final int delta = newTopPaddingPx - oldTopPaddingPx;
+        final int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        final int previousScrollY = scrollView.getScrollY();
+        final boolean atStart = previousScrollY <= 0;
+
+        scriptText.setPadding(sidePaddingPx, newTopPaddingPx, sidePaddingPx, sidePaddingPx);
+
+        scrollView.post(new Runnable() {
             @Override
             public void run() {
-                computeAndApplyOpeningPadding(contentRoot.getHeight());
+                if (!atStart) {
+                    int maxScroll = Math.max(0, scriptText.getHeight() - scrollView.getHeight());
+                    int proposed = previousScrollY + delta;
+                    int clamped = Math.min(Math.max(proposed, 0), maxScroll);
+                    scrollView.scrollTo(scrollView.getScrollX(), clamped);
+                }
+                if (afterSettled != null) {
+                    afterSettled.run();
+                }
             }
         });
-    }
-
-    /**
-     * Pads the top of scriptText so the first line of a freshly loaded
-     * script (scrollY == 0) initially sits about 75-80% of the way down
-     * the visible teleprompter area, leaving room for it to scroll
-     * naturally upward. The padding is part of scriptText's own content,
-     * so it scrolls with the script rather than staying fixed on screen,
-     * and it is independent of scriptText's horizontal mirror scaleX.
-     */
-    private void computeAndApplyOpeningPadding(int visibleAreaHeightPx) {
-        if (visibleAreaHeightPx <= 0) {
-            return;
-        }
-        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        int topPaddingPx = Math.max(sidePaddingPx,
-                Math.round(visibleAreaHeightPx * OPENING_SPACE_FRACTION));
-        scriptText.setPadding(sidePaddingPx, topPaddingPx, sidePaddingPx, sidePaddingPx);
     }
 
     private int dpToPx(float dp) {
@@ -426,6 +448,7 @@ public class MainActivity extends Activity {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
+        stopPreviewScrolling();
         uiState = UiState.WAITING_FOR_TAP;
         scriptText.setKeepScreenOn(false);
         refreshStateVisibility();
@@ -433,10 +456,25 @@ public class MainActivity extends Activity {
         // the script's scroll position did not change by entering full
         // screen, so whether it is still at its end is re-checked against
         // actual geometry once the full-screen layout has settled.
+        //
+        // The dynamic opening-buffer padding also depends on the
+        // full-screen viewport height, which is only accurate after
+        // controlsPanel's visibility change (just requested above) has
+        // actually been laid out -- hence the same post()-after-layout
+        // pattern used elsewhere in this class.
         scrollView.post(new Runnable() {
             @Override
             public void run() {
-                recomputeAtScriptEndAfterLayout();
+                int fullScreenHeightPx = scrollView.getHeight();
+                int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+                int newTopPaddingPx = Math.max(sidePaddingPx,
+                        Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
+                switchTopPaddingPreservingPosition(newTopPaddingPx, new Runnable() {
+                    @Override
+                    public void run() {
+                        recomputeAtScriptEndAfterLayout();
+                    }
+                });
             }
         });
     }
@@ -509,17 +547,25 @@ public class MainActivity extends Activity {
      */
     private void exitFullScreenToControls() {
         scrollHandler.removeCallbacksAndMessages(null);
+        stopPreviewScrolling();
         scriptText.setKeepScreenOn(false);
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
+        switchTopPaddingPreservingPosition(dpToPx(SCRIPT_PADDING_DP), null);
     }
 
     private void returnToBeginning() {
         scrollHandler.removeCallbacksAndMessages(null);
+        stopPreviewScrolling();
         scriptText.setKeepScreenOn(false);
         atScriptEnd = false;
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
+        // Return to Top always jumps to the very start, so it sets the
+        // minimal CONTROLS padding directly instead of going through
+        // switchTopPaddingPreservingPosition's delta-preserving logic.
+        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        scriptText.setPadding(sidePaddingPx, sidePaddingPx, sidePaddingPx, sidePaddingPx);
         scrollView.scrollTo(0, 0);
     }
 
@@ -554,6 +600,79 @@ public class MainActivity extends Activity {
         atScriptEnd = true;
         uiState = UiState.WAITING_FOR_TAP;
         refreshStateVisibility();
+    }
+
+    private void togglePreviewScrolling() {
+        if (previewScrolling) {
+            stopPreviewScrolling();
+        } else {
+            startPreviewScrolling();
+        }
+    }
+
+    /**
+     * Scrolls the script inside the control-screen preview, entirely
+     * independent of uiState/the full-screen SCROLLING state: uiState stays
+     * CONTROLS throughout, no countdown or Tap to Start is involved, and
+     * previewScrollRunnable is posted on the same shared scrollHandler used
+     * everywhere else, so every existing removeCallbacksAndMessages(null)
+     * cleanup call also cancels a pending preview tick for free.
+     */
+    private void startPreviewScrolling() {
+        if (uiState != UiState.CONTROLS || previewScrolling) {
+            return;
+        }
+        if (scriptText.getText() == null || scriptText.getText().length() == 0) {
+            Toast.makeText(this, R.string.no_script_loaded, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        previewScrolling = true;
+        scriptText.setKeepScreenOn(true);
+        updatePreviewButtonLabel();
+        scrollHandler.removeCallbacks(previewScrollRunnable);
+        scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+    }
+
+    /**
+     * Safe to call any time, including when preview scrolling is already
+     * inactive: this is the single stop path called both directly (the
+     * Preview/Stop button) and defensively from every control that must
+     * not let preview scrolling keep running underneath it (Enter
+     * Prompter, Load Script, Return to Top, Exit, Back, and the Activity
+     * lifecycle via exitFullScreenToControls()).
+     */
+    private void stopPreviewScrolling() {
+        if (!previewScrolling) {
+            return;
+        }
+        previewScrolling = false;
+        scrollHandler.removeCallbacks(previewScrollRunnable);
+        scriptText.setKeepScreenOn(false);
+        updatePreviewButtonLabel();
+    }
+
+    private void performPreviewScrollTick() {
+        if (!previewScrolling || uiState != UiState.CONTROLS) {
+            previewScrolling = false;
+            return;
+        }
+        int maxScroll = scriptText.getHeight() - scrollView.getHeight();
+        if (maxScroll <= 0) {
+            stopPreviewScrolling();
+            return;
+        }
+        int newY = scrollView.getScrollY() + computeScrollPixelsPerTick();
+        if (newY >= maxScroll) {
+            scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
+            stopPreviewScrolling();
+            return;
+        }
+        scrollView.scrollTo(scrollView.getScrollX(), newY);
+        scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+    }
+
+    private void updatePreviewButtonLabel() {
+        btnPreview.setText(previewScrolling ? R.string.btn_stop_preview : R.string.btn_preview);
     }
 
     /**
