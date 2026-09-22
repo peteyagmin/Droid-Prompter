@@ -23,15 +23,21 @@ import java.io.File;
 public class MainActivity extends Activity {
 
     /**
-     * The five teleprompter states. Exactly one tap-driven transition is
+     * The six teleprompter states. Exactly one tap-driven transition is
      * allowed out of any given state; see {@link #handleScriptTap()}.
+     * END_OF_SCRIPT_WAITING is distinct from PAUSED_FULLSCREEN: reaching
+     * the end of the script leaves the final text fully visible and
+     * unobstructed with no overlay, and only becomes PAUSED_FULLSCREEN
+     * (showing the reduced Restart/Back to Controls menu) once the user
+     * taps -- see stopScrollingAtEnd() and showEndOfScriptMenu().
      */
     private enum UiState {
         CONTROLS,
         WAITING_FOR_TAP,
         COUNTING_DOWN,
         SCROLLING,
-        PAUSED_FULLSCREEN
+        PAUSED_FULLSCREEN,
+        END_OF_SCRIPT_WAITING
     }
 
     /**
@@ -365,6 +371,11 @@ public class MainActivity extends Activity {
                 // Same behavior as pressing Back to Controls.
                 exitFullScreenToControls();
                 break;
+            case END_OF_SCRIPT_WAITING:
+                // Goes directly to CONTROLS without first showing the
+                // end-of-script menu -- unlike a tap, which reveals it.
+                exitFullScreenToControls();
+                break;
             case COUNTING_DOWN:
                 // cancelCountdown() already returns to WAITING_FOR_TAP or
                 // PAUSED_FULLSCREEN based on countdownOrigin.
@@ -585,7 +596,7 @@ public class MainActivity extends Activity {
      * Routes a single tap on the script area to exactly one state
      * transition, based on the state the app is in right now. Reaching
      * the end of the script during WAITING_FOR_TAP can no longer happen
-     * -- that now routes through PAUSED_FULLSCREEN instead (see
+     * -- that now routes through END_OF_SCRIPT_WAITING instead (see
      * stopScrollingAtEnd()) -- so this no longer branches on atScriptEnd.
      */
     private void handleScriptTap() {
@@ -598,6 +609,9 @@ public class MainActivity extends Activity {
                 break;
             case SCROLLING:
                 pauseFullScreenScrolling();
+                break;
+            case END_OF_SCRIPT_WAITING:
+                showEndOfScriptMenu();
                 break;
             case PAUSED_FULLSCREEN:
                 // The pause menu overlay is clickable and covers the full
@@ -789,18 +803,48 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The script reached its end during active scrolling: stop, but stay
-     * in full-screen mode rather than forcing the user back to the
-     * controls screen. This shows the same pause menu a mid-script tap
-     * would, but with atScriptEnd true, refreshStateVisibility() hides
-     * Resume -- there is nothing left to resume into -- leaving only
-     * Restart and Back to Controls, per the reduced end-of-script menu.
+     * The script reached its end during active scrolling: stop, but leave
+     * the final text fully visible and unobstructed -- no pause menu, no
+     * overlay of any kind -- since reaching the bottom of the ScrollView
+     * doesn't mean the presenter has finished reading the final visible
+     * lines yet. Stays in full-screen mode with the screen kept awake
+     * (refreshStateVisibility() keeps it awake for any non-CONTROLS
+     * state) so there's no time pressure. The reduced end-of-script menu
+     * (Restart / Back to Controls, no Resume) only appears once the user
+     * taps -- see showEndOfScriptMenu().
      */
     private void stopScrollingAtEnd() {
         scrollHandler.removeCallbacksAndMessages(null);
         atScriptEnd = true;
-        uiState = UiState.PAUSED_FULLSCREEN;
+        uiState = UiState.END_OF_SCRIPT_WAITING;
         refreshStateVisibility();
+    }
+
+    /**
+     * A tap during END_OF_SCRIPT_WAITING: reveals the reduced
+     * end-of-script menu (Restart / Back to Controls; Resume stays
+     * hidden since atScriptEnd is still true) by transitioning to the
+     * same PAUSED_FULLSCREEN state a mid-script pause uses. Deferred via
+     * post() so the buttons this reveals can never be reached by the
+     * same touch sequence that triggered this tap -- by the time this
+     * runs, the gesture that revealed the menu has already finished
+     * dispatching, so it takes a genuinely new tap to activate either
+     * button.
+     */
+    private void showEndOfScriptMenu() {
+        if (uiState != UiState.END_OF_SCRIPT_WAITING) {
+            return;
+        }
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (uiState != UiState.END_OF_SCRIPT_WAITING) {
+                    return;
+                }
+                uiState = UiState.PAUSED_FULLSCREEN;
+                refreshStateVisibility();
+            }
+        });
     }
 
     private void togglePreviewScrolling() {
@@ -888,6 +932,15 @@ public class MainActivity extends Activity {
      * onPause() always routes through exitFullScreenToControls() first.
      * Preview's own keep-screen-awake handling is separate and untouched
      * here, since Preview only ever runs while uiState stays CONTROLS.
+     *
+     * END_OF_SCRIPT_WAITING needs no special case of its own here: every
+     * condition below is phrased as "== the one state that should show
+     * this", so a state that matches none of them (as END_OF_SCRIPT_WAITING
+     * matches none of CONTROLS/COUNTING_DOWN/WAITING_FOR_TAP/PAUSED_FULLSCREEN)
+     * automatically hides the controls panel, countdown, Tap to Start, and
+     * pause menu alike -- leaving only the full-screen script itself
+     * visible and unobstructed -- while still keeping the screen awake via
+     * the trailing "!= CONTROLS" check.
      */
     private void refreshStateVisibility() {
         controlsPanel.setVisibility(uiState == UiState.CONTROLS ? View.VISIBLE : View.GONE);

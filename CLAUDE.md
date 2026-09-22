@@ -22,11 +22,12 @@ report the discrepancy before proceeding.
 - Purpose: a lightweight, offline teleprompter designed primarily to give
   older Android tablets a useful second life.
 - Original target hardware: Acer Iconia Tab A500 running Android 4.0.
-- Current physical testing device: Lenovo Smart Tab M8. Testing there has
-  been reported for the fullscreen-keyboard-extractor fix and for the
-  scriptBodyField collapse-to-zero-height problem the compact-editing-mode
-  fix addresses — see `PROJECT_SPEC.md` section 25 for exactly what has
-  and has not been confirmed.
+- Physically tested devices: Lenovo Smart Tab M8 and an ASUS Nexus 7
+  (2013, second generation, Android 6.0.1/API 23) — see `PROJECT_SPEC.md`
+  section 25 for exactly what has and has not been confirmed on each.
+  The "designed for an older Android version" first-launch warning is
+  device/version-dependent: observed on the Lenovo, not on the Nexus 7.
+  Don't generalize either device's behavior to other devices.
 - Do not claim physical Acer A500 testing unless it has actually occurred.
 
 ## Mandatory compatibility requirements
@@ -82,9 +83,9 @@ report the discrepancy before proceeding.
   Prompter tap, then continue scrolling from the exact paused position
   (not the top) — `beginActiveScrolling()`/`performScrollTick()` must
   never be changed to reset scroll position on their own.
-- Reaching the end of the script now also lands in `PAUSED_FULLSCREEN`
-  (not `WAITING_FOR_TAP`), with Resume hidden — never add a Resume button
-  that would do nothing at end-of-script.
+- Reaching the end of a script must leave the final text unobstructed
+  until the user taps. Only then should Restart and Back to Controls
+  appear. Resume must not appear at the end.
 
 ## Current UI facts that must not be inferred incorrectly
 
@@ -99,9 +100,12 @@ report the discrepancy before proceeding.
   Prompter" (`btn_start`), not "Enter Prompter" — a label-only rename;
   its ID, click listener, and the method it calls
   (`enterFullScreenWaitingFromControls()`) were kept as-is.
-- `MainActivity`'s `UiState` enum has five values, including
-  `PAUSED_FULLSCREEN` (the full-screen pause menu). See
-  `PROJECT_SPEC.md` sections 17–22.
+- `MainActivity`'s `UiState` enum has six values, including
+  `PAUSED_FULLSCREEN` (the full-screen pause menu) and
+  `END_OF_SCRIPT_WAITING` (the unobstructed final-text wait before a tap
+  reveals the reduced end-of-script menu) — these are deliberately
+  distinct states, not one reused for both. See `PROJECT_SPEC.md`
+  sections 17–22.
 - New Script and Edit Script are implemented (`ScriptEditorActivity`,
   `EDITOR_MODE_CREATE_NEW` / `EDITOR_MODE_EDIT_EXISTING`).
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on
@@ -165,7 +169,3 @@ After any APK-affecting change:
    `aapt dump xmltree`) rather than checking source only — source can say
    one thing and the compiled attribute another.
 10. Report the APK path, APK size, branch, and final commit hash.
-
-This documentation-only task did not touch source, resources, the APK, or
-any release file, so none of the above applied to it — see the commit
-this file was added in.

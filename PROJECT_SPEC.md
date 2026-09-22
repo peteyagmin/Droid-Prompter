@@ -3,12 +3,12 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `58a8159`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for the pause-menu/
-Start Prompter changes on top of it. The commit that lands this update is
-necessarily newer than `58a8159`; that commit's hash is reported
-separately at the end of the task that made these changes, not inferred
-here.
+**Documented as of commit `8a7115d`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for the
+END_OF_SCRIPT_WAITING correction and the latest hardware-testing results
+on top of it. The commit that lands this update is necessarily newer
+than `8a7115d`; that commit's hash is reported separately at the end of
+the task that made these changes, not inferred here.
 
 Throughout this document:
 
@@ -62,14 +62,17 @@ Throughout this document:
 - Permissions declared in `AndroidManifest.xml`:
   `android.permission.READ_EXTERNAL_STORAGE` and
   `android.permission.WRITE_EXTERNAL_STORAGE`. No `INTERNET` permission.
-  (`README.md`'s permissions section is stale — it mentions only
-  `READ_EXTERNAL_STORAGE`; see the Discrepancies section at the end of
-  this document.)
-- Known modern-Android installation limitation: `targetSdkVersion 14` is
-  far below what current Android versions expect. This project has not
-  characterized or tested what warnings or restrictions this produces on
-  a modern device — treat it as an open question if modern-device support
-  is ever pursued, not as a resolved fact.
+- Modern-Android installation range: the intended normal-installation
+  range is Android 4.0 through Android 13. Starting with Android 14,
+  normal installation is blocked outright because this app's
+  `targetSdkVersion` (14) is below the minimum Android 14 permits;
+  `adb install --bypass-low-target-sdk-block` is an advanced,
+  non-modernizing testing workaround for that specific block, not a
+  supported install path. Within the 4.0–13 range, some devices show a
+  one-time "designed for an older version of Android" warning on first
+  launch and some don't — this is device- and Android-version-dependent,
+  not a fixed cutoff; see section 25 for exactly what has been physically
+  observed.
 
 ## 4. Main control-screen layout
 
@@ -676,14 +679,21 @@ private enum UiState {
     WAITING_FOR_TAP,
     COUNTING_DOWN,
     SCROLLING,
-    PAUSED_FULLSCREEN
+    PAUSED_FULLSCREEN,
+    END_OF_SCRIPT_WAITING
 }
 ```
-— five values, declared in `MainActivity`. A second enum,
+— six values, declared in `MainActivity`. A second enum,
 `CountdownOrigin { INITIAL_START, RESUME }`, records which of two
 different places a countdown was started from (`startCountdown(origin)`
 takes it as a parameter and stores it in a `countdownOrigin` field), so
 canceling it can return to the correct stationary state.
+
+`END_OF_SCRIPT_WAITING` is deliberately distinct from `PAUSED_FULLSCREEN`:
+reaching the end of the script leaves the final text fully visible and
+unobstructed with no overlay at all, and only becomes `PAUSED_FULLSCREEN`
+(showing the reduced Restart/Back to Controls menu) once the user taps —
+see section 20.
 
 Transitions (all routed through `handleScriptTap()` for tap-driven ones):
 
@@ -692,7 +702,7 @@ Transitions (all routed through `handleScriptTap()` for tap-driven ones):
 - `WAITING_FOR_TAP` → `COUNTING_DOWN`: tap
   (`startCountdown(CountdownOrigin.INITIAL_START)`). `atScriptEnd` is
   always `false` here — reaching the end no longer leaves the app in
-  `WAITING_FOR_TAP` (see `SCROLLING` → `PAUSED_FULLSCREEN` below), so
+  `WAITING_FOR_TAP` (see `SCROLLING` → `END_OF_SCRIPT_WAITING` below), so
   this transition no longer branches on it.
 - `COUNTING_DOWN` → `SCROLLING`: countdown reaching 0
   (`beginActiveScrolling()`), not tap-driven.
@@ -700,27 +710,41 @@ Transitions (all routed through `handleScriptTap()` for tap-driven ones):
   Android Back (`cancelCountdown()`), branching on `countdownOrigin` —
   `INITIAL_START` returns to `WAITING_FOR_TAP`, `RESUME` returns to
   `PAUSED_FULLSCREEN`.
-- `SCROLLING` → `PAUSED_FULLSCREEN`: tap or Android Back
+- `SCROLLING` → `PAUSED_FULLSCREEN`: a mid-script tap or Android Back
   (`pauseFullScreenScrolling()`) — stops the scroll callback and shows
-  the pause menu without touching `CONTROLS` or the scroll position.
-  Replaces what used to be `SCROLLING` → `CONTROLS` directly.
-- `SCROLLING` → `PAUSED_FULLSCREEN` (with `atScriptEnd = true`): reaching
-  the end of the script during a scroll tick (`stopScrollingAtEnd()`),
-  not tap-driven. Replaces the old `SCROLLING` → `WAITING_FOR_TAP`
-  end-of-script transition — see section 20.
+  the full pause menu (Resume/Restart/Back to Controls) immediately,
+  without touching `CONTROLS` or the scroll position. Replaces what used
+  to be `SCROLLING` → `CONTROLS` directly.
+- `SCROLLING` → `END_OF_SCRIPT_WAITING` (with `atScriptEnd = true`):
+  reaching the end of the script during a scroll tick
+  (`stopScrollingAtEnd()`), not tap-driven. No menu or overlay appears
+  yet — see section 20.
+- `END_OF_SCRIPT_WAITING` → `PAUSED_FULLSCREEN`: a tap
+  (`showEndOfScriptMenu()`, deferred via `scrollView.post(...)` — section
+  20) — reveals the reduced end-of-script menu (Restart/Back to
+  Controls; Resume stays hidden since `atScriptEnd` is still `true`).
+- `END_OF_SCRIPT_WAITING` → `CONTROLS`: Android Back
+  (`exitFullScreenToControls()`) — goes directly to `CONTROLS`,
+  deliberately skipping the end-of-script menu a tap would show.
 - `PAUSED_FULLSCREEN` → `COUNTING_DOWN`: pressing Resume
   (`startCountdown(CountdownOrigin.RESUME)`); only offered when
-  `!atScriptEnd` (section 19).
+  `!atScriptEnd` (section 19) — since `atScriptEnd` is only ever `true`
+  by way of `END_OF_SCRIPT_WAITING` → `PAUSED_FULLSCREEN`, Resume can
+  never appear in the state that used to be reached straight from
+  end-of-script.
 - `PAUSED_FULLSCREEN` → `WAITING_FOR_TAP`: pressing Restart
   (`restartFromPauseMenu()` → `resetToWaitingFromTop()`, identical to
-  Start Prompter's reset — section 17).
+  Start Prompter's reset — section 17). Works the same whether
+  `PAUSED_FULLSCREEN` was reached from a mid-script pause or from the
+  end-of-script menu.
 - `PAUSED_FULLSCREEN` → `CONTROLS`: pressing Back to Controls, or
   Android Back while `PAUSED_FULLSCREEN` (`exitFullScreenToControls()`
-  — the same method the Exit button and Back from `WAITING_FOR_TAP` use).
+  — the same method the Exit button and Back from `WAITING_FOR_TAP`/
+  `END_OF_SCRIPT_WAITING` use).
 - `WAITING_FOR_TAP` → `CONTROLS`: Android Back
   (`exitFullScreenToControls()`) — unchanged from before; `WAITING_FOR_TAP`
-  is the one full-screen state whose Back behavior still exits directly
-  rather than pausing/showing a menu.
+  is the other full-screen state (besides `END_OF_SCRIPT_WAITING`) whose
+  Back behavior exits directly rather than pausing/showing a menu.
 - Any state → `CONTROLS`: `onPause()`, Exit button
   (`exitFullScreenToControls()`).
 
@@ -753,13 +777,17 @@ its own start/stop methods change `uiState`.
   (`btn_resume` / `btn_restart` / `btn_back_to_controls`). None of the
   three, nor the overlay itself, is touched by `applyMirror()` — the
   pause menu is never mirrored, regardless of the Mirror setting.
-- Pause/tap-to-pause: a tap during `SCROLLING` (or Android Back) calls
-  `pauseFullScreenScrolling()`: cancels the pending scroll callback,
-  sets `uiState = PAUSED_FULLSCREEN`, and calls
-  `refreshStateVisibility()` — which shows `pauseMenuOverlay` and keeps
-  `controlsPanel` hidden. The scroll position is never touched, so it is
-  preserved exactly. `atScriptEnd` is not touched either (stays `false`
-  for a mid-script pause).
+- Manual pause/tap-to-pause: a tap during `SCROLLING` (or Android Back)
+  calls `pauseFullScreenScrolling()`: cancels the pending scroll
+  callback, sets `uiState = PAUSED_FULLSCREEN`, and calls
+  `refreshStateVisibility()` — which shows `pauseMenuOverlay` (with
+  Resume, Restart, and Back to Controls all visible) immediately and
+  keeps `controlsPanel` hidden. The scroll position is never touched, so
+  it is preserved exactly. `atScriptEnd` is not touched either (stays
+  `false` for a mid-script pause). This is unconditional and unchanged
+  by the end-of-script correction in section 20 below — a manual pause
+  always shows the full three-button menu right away, with no delay or
+  intermediate state.
 - Resume: pressing **Resume** calls
   `startCountdown(CountdownOrigin.RESUME)` — the same countdown path as
   a fresh Start Prompter tap (`COUNTDOWN_START_VALUE = 5`,
@@ -789,8 +817,9 @@ its own start/stop methods change `uiState`.
 - Keep-screen-awake: centralized in `refreshStateVisibility()` as
   `scriptText.setKeepScreenOn(uiState != UiState.CONTROLS)` — every
   full-screen state (`WAITING_FOR_TAP`, `COUNTING_DOWN`, `SCROLLING`,
-  `PAUSED_FULLSCREEN`) now keeps the screen awake, not just
-  `COUNTING_DOWN`/`SCROLLING` as before; only `CONTROLS` clears it. This
+  `PAUSED_FULLSCREEN`, `END_OF_SCRIPT_WAITING`) keeps the screen awake,
+  not just `COUNTING_DOWN`/`SCROLLING` as before either round of this
+  feature; only `CONTROLS` clears it. This
   single line replaced several individual `setKeepScreenOn()` calls that
   used to be scattered across the transition methods. Preview's own
   keep-screen-awake handling (`startPreviewScrolling()`/
@@ -808,32 +837,82 @@ its own start/stop methods change `uiState`.
 
 ## 20. End-of-script behavior
 
+Two distinct phases, deliberately kept as two different `UiState` values
+rather than reusing `PAUSED_FULLSCREEN` for both:
+
+**Phase 1 — `END_OF_SCRIPT_WAITING`: unobstructed final text.**
+
 - Stopping at the end: `performScrollTick()` detects `maxScroll <= 0`
   (nothing to scroll) or that the next tick would reach/exceed
   `maxScroll`, snaps to exactly `maxScroll`, and calls
   `stopScrollingAtEnd()`.
-- `stopScrollingAtEnd()` now sets `atScriptEnd = true` and
-  `uiState = PAUSED_FULLSCREEN` (previously `WAITING_FOR_TAP`) — reaching
-  the end shows the same pause-menu overlay a mid-script pause would,
-  rather than a bare full-screen view with no available action beyond a
-  tap-to-exit.
-- Reduced end-of-script menu: because `refreshStateVisibility()` hides
-  `btnResume` whenever `atScriptEnd` is true, the menu shown at the end
-  contains only **Restart** and **Back to Controls** — there is never a
-  Resume button that would do nothing (or immediately re-stop) if
-  pressed.
+- `stopScrollingAtEnd()` cancels the pending scroll callback, sets
+  `atScriptEnd = true` and `uiState = END_OF_SCRIPT_WAITING`, and calls
+  `refreshStateVisibility()`. It does **not** touch `scrollView`'s
+  position (already snapped to `maxScroll` by the caller) and does not
+  start any countdown.
+- Why a separate state: reaching the bottom of the `ScrollView` doesn't
+  mean the presenter has finished reading or speaking the final visible
+  lines. `END_OF_SCRIPT_WAITING` shows no overlay of any kind —
+  `refreshStateVisibility()`'s existing conditions are each phrased as
+  "== the one state that should show this" (`controlsPanel` only for
+  `CONTROLS`, `countdownText` only for `COUNTING_DOWN`,
+  `tapInstructionText` only for `WAITING_FOR_TAP && !atScriptEnd`,
+  `pauseMenuOverlay` only for `PAUSED_FULLSCREEN`), so a state matching
+  none of them — as `END_OF_SCRIPT_WAITING` matches none — automatically
+  hides all four, leaving only the full-screen script itself visible and
+  unobstructed. No code change to `refreshStateVisibility()`'s body was
+  needed to get this; it fell out of how the method was already written.
+- Screen stays awake throughout, via `refreshStateVisibility()`'s
+  `scriptText.setKeepScreenOn(uiState != UiState.CONTROLS)` — the
+  presenter gets unlimited time to finish reading before tapping.
+- `controlsPanel` stays hidden and the app remains in full-screen mode
+  the entire time — there is no return to `CONTROLS` in this phase.
+
+**Phase 2 — tap reveals the reduced end-of-script menu.**
+
+- `handleScriptTap()`'s `END_OF_SCRIPT_WAITING` case calls
+  `showEndOfScriptMenu()`, which (after re-confirming `uiState` is still
+  `END_OF_SCRIPT_WAITING`) transitions to `uiState = PAUSED_FULLSCREEN`
+  and calls `refreshStateVisibility()` — the exact same state a
+  mid-script pause reaches, so it's governed by the exact same
+  visibility rules: `pauseMenuOverlay` becomes visible, and because
+  `atScriptEnd` is still `true`, `btnResume` stays `GONE` (per its
+  `atScriptEnd ? GONE : VISIBLE` rule) while `btnRestart` and
+  `btnBackToControls` (which have no such conditional) are shown — the
+  reduced **Restart** / **Back to Controls** menu, with no Resume button
+  that could do nothing (or immediately re-stop) if pressed.
+- Double-activation safety: `showEndOfScriptMenu()`'s state change and
+  `refreshStateVisibility()` call are wrapped in `scrollView.post(...)`
+  (re-checking `uiState` once more inside the posted `Runnable`, in case
+  anything changed in the meantime) rather than applied synchronously
+  inside the tap handler. In practice a single tap's `ACTION_DOWN`→
+  `ACTION_UP` sequence is already fully dispatched and finished by the
+  time `GestureDetector.onSingleTapUp()` fires, so the newly-revealed
+  buttons couldn't be hit by that same physical touch regardless; the
+  `post()` is defense in depth on top of that, guaranteeing the reveal
+  never lands mid-dispatch of the triggering gesture.
+- Restart and Back to Controls, once the menu is showing: identical to
+  the manual-pause versions (section 19) — `restartFromPauseMenu()` and
+  `exitFullScreenToControls()` respectively — since both states are
+  `PAUSED_FULLSCREEN` by that point. No separate code path exists for
+  "restart from the end" versus "restart from a mid-script pause."
 - `atScriptEnd` behavior: set `true` by `stopScrollingAtEnd()`; reset to
   `false` by `resetToWaitingFromTop()` (used by both Start Prompter and
   Restart) and by `loadScriptFile()`/`applyNoScriptState()`.
-- Tapping at the end: no longer routes through `handleScriptTap()` at
-  all — `pauseMenuOverlay` is visible and clickable, so it intercepts the
-  tap; the user presses Restart or Back to Controls instead. This is the
-  "small adjustment" to the previous tap-at-end behavior that the pause
-  menu required.
+
+**Android Back differs from a tap** while in `END_OF_SCRIPT_WAITING`:
+`onBackPressed()` calls `exitFullScreenToControls()` directly, going
+straight to `CONTROLS` without ever showing the end-of-script menu —
+unlike a tap, which reveals it first. This mirrors `WAITING_FOR_TAP`,
+the only other state whose Back behavior exits directly rather than
+pausing into a menu.
+
 - Re-entering Prompter mode: only via Start Prompter (from `CONTROLS`) or
-  Restart (from the end-state pause menu), both of which unconditionally
-  reset `atScriptEnd = false` and scroll to the top (section 17) — there
-  is still no "continue from the end" or "loop" behavior.
+  Restart (from the end-of-script menu, once revealed), both of which
+  unconditionally reset `atScriptEnd = false` and scroll to the top
+  (section 17) — there is still no "continue from the end" or "loop"
+  behavior.
 
 ## 21. Preview versus full-screen padding
 
@@ -880,14 +959,18 @@ its own start/stop methods change `uiState`.
     script-area tap. Does **not** immediately return to `CONTROLS`.
   - `PAUSED_FULLSCREEN` → `exitFullScreenToControls()`: identical to
     pressing Back to Controls.
+  - `END_OF_SCRIPT_WAITING` → `exitFullScreenToControls()`: goes directly
+    to `CONTROLS` without first showing the end-of-script menu — unlike
+    a tap in this state, which reveals it (section 20). Does not restart
+    the script and does not display a countdown.
   - `COUNTING_DOWN` → `cancelCountdown()`: cancels the countdown and
     returns to `WAITING_FOR_TAP` (with "Tap to Start" shown) or
     `PAUSED_FULLSCREEN` (with the pause menu shown, paused position
     preserved), depending on `countdownOrigin`.
   - `WAITING_FOR_TAP` → `exitFullScreenToControls()`: exits full-screen
-    mode directly to `CONTROLS` — the one full-screen state that still
-    behaves this way rather than pausing/showing a menu, unchanged from
-    before the pause menu existed.
+    mode directly to `CONTROLS` — the other full-screen state (besides
+    `END_OF_SCRIPT_WAITING`) that behaves this way rather than
+    pausing/showing a menu, unchanged from before the pause menu existed.
   - `CONTROLS` → `finish()`: closes the app. Unchanged.
 - Editor Back (`ScriptEditorActivity.onBackPressed()`):
   `handleCancelOrBack()` — dirty-check + Discard Changes dialog, same as
@@ -896,9 +979,10 @@ its own start/stop methods change `uiState`.
   browser's start location or a detected storage root; otherwise
   `setResult(RESULT_CANCELED)` and closes. Unaffected.
 - Callback cleanup: every path back to `CONTROLS`, into
-  `PAUSED_FULLSCREEN`, or out of the app cancels pending callbacks first
-  (`exitFullScreenToControls()`, `pauseFullScreenScrolling()`,
-  `cancelCountdown()`, and the lifecycle methods' explicit
+  `PAUSED_FULLSCREEN`, or into `END_OF_SCRIPT_WAITING` cancels pending
+  callbacks first (`exitFullScreenToControls()`,
+  `pauseFullScreenScrolling()`, `cancelCountdown()`,
+  `stopScrollingAtEnd()`, and the lifecycle methods' explicit
   `scrollHandler.removeCallbacksAndMessages(null)`), so no
   scroll/countdown/preview callback can keep firing after leaving the
   relevant state.
@@ -973,72 +1057,115 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
 
 ### Physically tested on Lenovo Smart Tab M8
 
-Reported by the user, based on running built APKs on that device:
+Reported by the user, based on running built APKs on that device. Its
+exact Android version is not stated anywhere in this repository and is
+not inferred here.
 
-- The fullscreen white keyboard "extract editor" previously appeared
-  when the soft keyboard opened in the Script Editor; the
-  `flagNoExtractUi` fix (present in current source, section 11) was
-  confirmed by the user to prevent it.
-- Before the compact-editing-mode fix existed, opening the keyboard in
-  landscape in the Script Editor was confirmed to compress
-  `scriptBodyField` to zero usable height, motivating the compact-mode
-  work described in section 11.
-- After the compact-editing-mode fix, the user physically tested it and
-  found it fundamentally working (title/filename collapse, "Edit
-  Filename", and the raw `KEYCODE_ENTER` fallback all functioned), but
-  reported four remaining issues: Save appeared physically larger than
-  Cancel despite matching text size; Cancel/Save stayed visible above the
-  keyboard while typing a filename; showing Save before the script body
-  had focus was confusing; and the filename hint didn't explain the
-  Enter/Next behavior. All four are what the `editorButtonRow`
-  visibility toggling, the shared `EditorActionButton` style, and the
-  updated `filename_hint` string (sections 10–11) were built to address.
+- Normal sideloading works.
+- Android displays a one-time warning on first launch that the
+  application was designed for an older Android version; the app
+  launches and functions normally once the warning is dismissed. See
+  "Android version warning" below — this is device/version-dependent,
+  not universal.
+- Core teleprompter functionality has been physically tested.
+- The built-in file browser has been physically tested.
+- Preview scrolling has been physically tested.
+- New Script and Edit Script have been physically tested.
+- The compact Script Editor layout has been physically tested. The
+  fullscreen white keyboard "extract editor" previously appeared when
+  the soft keyboard opened in the Script Editor; the `flagNoExtractUi`
+  fix (section 11) was confirmed to prevent it. Before the
+  compact-editing-mode fix existed, opening the keyboard in landscape
+  was confirmed to compress `scriptBodyField` to zero usable height,
+  motivating that work. The specific editor-button refinements built in
+  response to four issues found during that testing (`editorButtonRow`
+  hiding while `filenameField` has focus, the two buttons' identical
+  geometry via `EditorActionButton`, the updated filename hint) have not
+  been separately re-tested since being implemented — treat those three
+  specifically as implemented-and-compiled (compiled-APK-verified for
+  the button geometry and hint text), not hardware-reverified.
+- The full-screen pause menu has been physically tested and is
+  functional. Resume, Restart, and Back to Controls have all been
+  physically tested.
 
-**Not yet confirmed on hardware**: the specific refinements built in
-response to the four issues above (`editorButtonRow` hiding while
-`filenameField` has focus, the two buttons' now-identical geometry via
-`EditorActionButton`, and the updated filename hint) have not been
-separately re-tested on the Lenovo since being implemented. Treat them as
-implemented-and-compiled — including compiled-APK-verified for the
-button geometry and hint text specifically — not as hardware-reverified.
+**Awaiting physical verification on the Lenovo**: the
+`END_OF_SCRIPT_WAITING` correction in this round — the final script text
+staying unobstructed with no overlay until a tap, the tap then revealing
+the reduced Restart/Back to Controls menu, and Android Back from that
+state going straight to `CONTROLS` — has not yet been installed and
+tested on this device. It must remain marked as awaiting verification
+until the corrected build from this round is confirmed there. Verified
+so far only by: successful build, the new `UiState` value and its
+transition methods confirmed present in the compiled `classes.dex`, and
+v1/v2 signature and zipalign checks.
 
-**Also not yet confirmed on hardware**: the entire full-screen pause-menu
-feature (sections 17–22) — `PAUSED_FULLSCREEN`, tap/Back pausing instead
-of exiting, Resume's countdown-then-continue, Restart, Back to Controls,
-the reduced end-of-script menu, the "Start Prompter" rename, and the
-screen staying awake through `WAITING_FOR_TAP`/`PAUSED_FULLSCREEN` — is
-new in this round and has not been run on any physical device yet.
-Verified so far only by successful compilation, v1/v2 signature and
-zipalign checks, and inspecting the compiled layout/string resources
-(button order and IDs inside `pauseMenuOverlay`, the "Start Prompter" /
-"Resume" / "Restart" / "Back to Controls" string values). In particular,
-untested: whether the touch-interception on `pauseMenuOverlay` actually
-blocks the script `ScrollView` beneath it from receiving taps or manual
-scroll gestures on real hardware, and whether the three pause-menu
-buttons and their spacing look correct (no overlap/clipping) at the
-device's actual resolution.
+### ASUS Nexus 7 (2013, second generation)
+
+Newly reported by the user this round, based on running the built APK on
+this device. Identified as the 2013 second-generation Nexus 7 by its
+rear-facing camera (the 2012 first generation has none) and its Android
+version.
+
+- Runs Android 6.0.1 "Marshmallow" (API level 23).
+- Installs normally through sideloading and launches normally.
+- Android 6.0.1 did **not** display the "designed for an older Android
+  version" warning on this specific tested device — this observation is
+  specific to this Nexus 7 and is not generalized to every Android 6
+  device or manufacturer build (see "Android version warning" below).
+- The main controls, built-in file browser, script loading, New Script,
+  Edit Script, Preview scrolling, full-screen Prompter mode, the pause
+  menu, and Resume/Restart/Back to Controls are all functional on this
+  device.
+- The Nexus 7 has less usable screen space than the Lenovo, making it a
+  useful compact-layout test in addition to the Lenovo.
+
+**Awaiting physical verification on the Nexus 7**: the same
+`END_OF_SCRIPT_WAITING` correction described above for the Lenovo — not
+yet installed or tested on this device either, since the corrected APK
+postdates this device's testing session.
 
 ### Acer Iconia Tab A500
 
 No physical testing on an actual Acer Iconia Tab A500 has occurred
-anywhere in this project's history. All A500-specific guidance
-(`README.md`'s troubleshooting section, the original target-hardware
-framing) is written for that device but remains unverified against it.
-Everything not explicitly listed above as Lenovo-tested should be
-considered to require A500 (or equivalent API 14 device/emulator)
-testing, including: touch behavior of the tap-to-show/hide gesture over
-the auto-scrolling `ScrollView`, real-world auto-scroll smoothness on
-weaker hardware, the exact on-device rendering of the launcher icon and
-button-background drawables, and whether the A500's microSD mount path
-is among the legacy paths already checked (section 6).
+anywhere in this project's history — the repository contains no later
+confirmed test result for it. All A500-specific guidance (`README.md`'s
+troubleshooting section, the original target-hardware framing) is
+written for that device but remains unverified against it. Do not claim
+confirmed A500 storage, touch, keyboard, or scrolling behavior.
+Everything not explicitly listed above as Lenovo- or Nexus-7-tested
+should be considered to require A500 (or equivalent API 14
+device/emulator) testing, including: touch behavior of the
+tap-to-show/hide gesture over the auto-scrolling `ScrollView`,
+real-world auto-scroll smoothness on weaker hardware, the exact
+on-device rendering of the launcher icon and button-background
+drawables, and whether the A500's microSD mount path is among the
+legacy paths already checked (section 6).
 
-### Modern Android
+### Android version warning: device- and version-dependent, not universal
 
-`targetSdkVersion 14` is far below what current Android versions expect;
-this is expected to produce install-time warnings or restrictions on
-modern devices, but the specifics have not been characterized or tested
-in this project. This project is not redefined as a modern-Android
-application by that fact — its compatibility target remains API 14.
+Some newer Android devices may display a one-time warning that the app
+was designed for an older Android version. This warning was observed on
+the Lenovo Smart Tab M8 but was **not** displayed on the tested ASUS
+Nexus 7 running Android 6.0.1. Do not say that all Android 6 devices
+suppress the warning, and do not say that every newer Android device
+displays it — both tested devices are the only data points this project
+has, and they disagree with each other. This is separate from, and does
+not change:
+
+- The intended normal-installation range, Android 4.0 through Android
+  13 (not every version in that range has been physically tested — only
+  the two devices above have).
+- Starting with Android 14, normal installation is blocked outright
+  because this app's `targetSdkVersion` (14) is below the minimum
+  Android 14 permits — a stricter, separate restriction from the
+  first-launch warning above, not bypassed by enabling "Install unknown
+  apps." Android 14+ is outside this app's normal supported installation
+  range (see `README.md`'s Android Compatibility section for the
+  advanced `adb install --bypass-low-target-sdk-block` testing
+  workaround).
+
+`minSdkVersion`/`targetSdkVersion` remain 14; this project is not
+redefined as a modern-Android application by any of the above.
 
 ## 26. Artwork and launcher icons
 
@@ -1113,10 +1240,16 @@ predating "Enter Prompter" (itself since renamed to "Start Prompter" in
 this round). Both were fixed in a subsequent `README.md`-focused task and
 again kept current with this round's pause-menu changes.
 
-No outstanding discrepancies between the current source and this
+This round also found section 3's "Known modern-Android installation
+limitation" note stale — it still claimed the Android 14+ install block
+and device-warning behavior were "not characterized," when `README.md`'s
+Android Compatibility section had already documented both in an earlier
+round, and this round adds physical confirmation from two devices. Fixed
+in place (section 3) rather than left to accumulate further.
+
+No other outstanding discrepancies between the current source and this
 documentation are known as of this round; every behavior described above
 was confirmed directly against `app/src/main/java/...`,
-  `app/src/main/res/...`, `AndroidManifest.xml`, `app/build.gradle`, and
-  `build.sh` as checked out at commit `66d459f`, and, where noted, by
-  inspecting the compiled APK's resolved attributes rather than the XML
-  source alone.
+`app/src/main/res/...`, `AndroidManifest.xml`, `app/build.gradle`, and
+`build.sh` as checked out at commit `8a7115d`, and, where noted, by
+inspecting the compiled APK/DEX rather than the source alone.

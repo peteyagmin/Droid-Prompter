@@ -100,9 +100,13 @@ difference is the most likely place to look.
 13. There is no separate Return to Top or Return to Beginning button —
     Restart (from the pause menu) or Start Prompter again (from the
     controls) serve that role.
-14. Reaching the very end of the script also pauses into the full-screen
-    menu, but with Resume hidden (there's nothing left to resume) —
-    only Restart and Back to Controls are offered.
+14. Reaching the very end of the script stops scrolling but leaves the
+    final text fully visible and unobstructed — no menu, no overlay —
+    and keeps the screen awake, so there's no rush to finish reading it.
+    A tap then reveals the end-of-script menu, with only **Restart** and
+    **Back to Controls** offered (no Resume — there's nothing left to
+    scroll to). Android Back at this point skips the menu and goes
+    straight to the control screen.
 15. Preview scrolling (control screen) and full-screen Prompter
     scrolling are always independent — starting or stopping one never
     starts, stops, or otherwise affects the other, even though both use
@@ -233,9 +237,12 @@ A500-Teleprompter/
   tested — see Hardware Testing below for exactly what has.
 - On newer Android tablets within that supported range, installing this
   APK may show a one-time warning that the app was designed for an older
-  version of Android. This warning has been physically observed on a
-  Lenovo Smart Tab M8; after dismissing it, the app launches and runs
-  normally there.
+  version of Android. This warning was observed on a Lenovo Smart Tab M8
+  (app launches and runs normally after dismissing it) but was **not**
+  displayed on a tested ASUS Nexus 7 running Android 6.0.1 — whether it
+  appears depends on the specific device and Android version, not a
+  fixed cutoff, so don't assume every Android 6 device (or every newer
+  device generally) behaves the same way. See Hardware Testing below.
 - **Starting with Android 14, normal installation is blocked outright**:
   Android 14 refuses to install an APK whose `targetSdkVersion` is below
   the minimum it permits, and this app's `targetSdkVersion` (14) is well
@@ -357,28 +364,39 @@ installation path.
 
 ### Lenovo Smart Tab M8
 
-Physically tested. Confirmed on this device:
+Physically tested (exact Android version not confirmed, so not stated
+here). Confirmed on this device:
 
-- Normal sideloading works (subject to the one-time legacy-app warning
-  described above).
-- Core teleprompter functionality: loading a script, starting the
-  Prompter, the countdown, auto-scrolling, Exit.
-- Built-in file browsing.
-- Preview scrolling on the control screen.
-- New Script and Edit Script (creating and saving a script, editing and
-  re-saving an existing one).
-- Script-editor keyboard and compact-layout behavior have been evaluated
-  during development. The most recent compact-editor refinements have
-  not been separately re-confirmed as fully verified since their latest
-  commit — see `PROJECT_SPEC.md` section 25 for exactly what is and
-  isn't confirmed as of any given commit.
+- Normal sideloading works; a one-time "designed for an older Android
+  version" warning appears on first launch, and the app launches and
+  functions normally once it's dismissed.
+- Core teleprompter functionality, the built-in file browser, Preview
+  scrolling, New Script, and Edit Script.
+- The compact Script Editor layout and keyboard behavior.
+- The full-screen pause menu, and Resume, Restart, and Back to Controls,
+  are all physically tested and functional.
 
-**Not yet tested on any device**: the full-screen pause menu introduced
-in this round (tapping/Back pausing into a menu instead of returning
-directly to the controls, Resume, Restart, Back to Controls, the reduced
-end-of-script menu, and the screen staying awake through the "Tap to
-Start" wait) — verified only by a successful build and inspecting the
-compiled layout/resources so far. See `PROJECT_SPEC.md` section 25.
+**Awaiting physical verification**: this round's correction — the final
+script text staying fully visible and unobstructed (no menu or overlay)
+until a tap, with the reduced Restart/Back to Controls menu appearing
+only then, and Android Back at that point going straight to the control
+screen — has not yet been installed and tested on this device.
+
+### ASUS Nexus 7 (2013, second generation)
+
+Physically tested. Runs Android 6.0.1 (API level 23). Installs and
+launches normally through sideloading; notably, this device did **not**
+show the "designed for an older Android version" warning the Lenovo
+does (see the note at the end of this section). Confirmed functional on
+this device: the main
+controls, the built-in file browser, script loading, New Script, Edit
+Script, Preview scrolling, full-screen Prompter mode, the pause menu, and
+Resume/Restart/Back to Controls. Its smaller screen than the Lenovo's
+makes it a useful additional compact-layout check.
+
+**Awaiting physical verification**: the same end-of-script correction
+described above for the Lenovo has not yet been tested on this device
+either.
 
 ### Acer Iconia Tab A500
 
@@ -395,6 +413,10 @@ hardware:
   drawables.
 - Whether the A500's particular microSD mount path is one of the legacy
   paths already checked (see Built-in file browser above).
+
+The "designed for an older Android version" warning is device- and
+version-dependent, not universal — see Android Compatibility above for
+the Lenovo-vs-Nexus-7 comparison.
 
 Treat any A500-specific claim elsewhere in this document as intent, not
 confirmed behavior, until this section is updated to say otherwise.
