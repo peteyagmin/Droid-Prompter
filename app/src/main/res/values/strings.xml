@@ -32,7 +32,10 @@
     <string name="script_editor_title">Script Editor</string>
     <string name="title_new_script">New Script</string>
     <string name="title_edit_script">Edit Script</string>
-    <string name="filename_hint">Filename</string>
+    <string name="script_filename_label">Script Filename</string>
+    <string name="filename_hint">Enter a filename</string>
+    <string name="script_text_label">Script Text</string>
+    <string name="script_body_hint">Type or paste your script here</string>
     <string name="btn_save">Save</string>
     <string name="filename_required">Enter a filename before saving.</string>
     <string name="filename_invalid_chars">Filename contains characters that cannot be used.</string>

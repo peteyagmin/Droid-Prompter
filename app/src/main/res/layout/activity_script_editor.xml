@@ -15,14 +15,24 @@
         android:textStyle="bold"
         android:text="@string/title_new_script" />
 
+    <TextView
+        android:id="@+id/filenameLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/script_filename_label"
+        android:textColor="@color/text_white"
+        android:textSize="16sp" />
+
     <EditText
         android:id="@+id/filenameField"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="6dp"
         android:inputType="text"
         android:singleLine="true"
         android:maxLines="1"
+        android:imeOptions="flagNoExtractUi|actionNext"
         android:hint="@string/filename_hint"
         android:textColor="@color/text_white"
         android:textColorHint="@color/text_light_gray"
@@ -30,15 +40,26 @@
         android:background="@drawable/button_background"
         android:padding="12dp" />
 
+    <TextView
+        android:id="@+id/scriptBodyLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/script_text_label"
+        android:textColor="@color/text_white"
+        android:textSize="16sp" />
+
     <EditText
         android:id="@+id/scriptBodyField"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="6dp"
         android:gravity="top|left"
         android:inputType="textMultiLine"
+        android:imeOptions="flagNoExtractUi"
         android:scrollbars="vertical"
+        android:hint="@string/script_body_hint"
         android:textColor="@color/text_white"
         android:textColorHint="@color/text_light_gray"
         android:textSize="@dimen/editor_text_size"

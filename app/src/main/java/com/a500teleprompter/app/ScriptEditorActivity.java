@@ -6,7 +6,9 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Environment;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -79,6 +81,21 @@ public class ScriptEditorActivity extends Activity {
         if (savedInstanceState != null) {
             restoreUnsavedState(savedInstanceState);
         }
+
+        // filenameField's imeOptions offers a "Next" action (see
+        // activity_script_editor.xml); this is the only place that
+        // consumes it, moving focus to the script body without ever
+        // touching either field's imeOptions.
+        filenameField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (actionId == EditorInfo.IME_ACTION_NEXT) {
+                    scriptBodyField.requestFocus();
+                    return true;
+                }
+                return false;
+            }
+        });
 
         btnCancel.setOnClickListener(new View.OnClickListener() {
             @Override
