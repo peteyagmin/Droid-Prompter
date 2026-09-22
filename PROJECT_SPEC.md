@@ -3,12 +3,14 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `d37883d`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for the end-of-script
-vertical-centering refinement (the dynamic trailing end space, section
-21) on top of it. The commit that lands this update is necessarily newer
-than `d37883d`; that commit's hash is reported separately at the end of
-the task that made these changes, not inferred here.
+**Documented as of commit `a32c196`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for two full-screen
+Prompter refinements on top of it: lowering the final resting position
+of the last script line (`END_SPACE_FRACTION` `0.5f` → `0.4f`, section
+21) and hiding the status/navigation bars throughout full-screen Prompter
+mode (section 22). The commit that lands this update is necessarily
+newer than `a32c196`; that commit's hash is reported separately at the
+end of the task that made these changes, not inferred here.
 
 Throughout this document:
 
@@ -47,7 +49,7 @@ Throughout this document:
 - `versionCode 1`, `versionName "1.0"` (`app/build.gradle`), unchanged
   since project inception. No beta/release designation, changelog, or
   git tag exists in the repository (`git tag` is currently empty) — see
-  section 28 for the intended (not yet practiced) discipline.
+  section 29 for the intended (not yet practiced) discipline.
 
 ## 3. Supported Android configuration
 
@@ -71,7 +73,7 @@ Throughout this document:
   supported install path. Within the 4.0–13 range, some devices show a
   one-time "designed for an older version of Android" warning on first
   launch and some don't — this is device- and Android-version-dependent,
-  not a fixed cutoff; see section 25 for exactly what has been physically
+  not a fixed cutoff; see section 26 for exactly what has been physically
   observed.
 
 ## 4. Main control-screen layout
@@ -475,7 +477,7 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   `editorButtonRow`-hiding and identical-button-size refinements
   described above came to be requested. Those specific refinements
   themselves have not yet been separately re-confirmed on hardware since
-  being implemented — see section 25.
+  being implemented — see section 26.
 
 ## 12. Script Editor state and safety
 
@@ -959,7 +961,7 @@ needed in either Preview method to keep this true.
 of the measured full-screen viewport height (`scrollView.getHeight()`),
 floored at `SCRIPT_PADDING_DP`. Unchanged from before this round.
 
-**Full-screen trailing end space (bottom)**: `END_SPACE_FRACTION = 0.5f`
+**Full-screen trailing end space (bottom)**: `END_SPACE_FRACTION = 0.4f`
 of the same measured full-screen viewport height, floored at
 `SCRIPT_PADDING_DP`. Both fractions are computed together, from the same
 viewport-height measurement, inside `resetToWaitingFromTop()` (shared by
@@ -969,18 +971,35 @@ View's own padding, this bottom padding *is* the trailing space — no
 blank lines or extra characters are ever added to `scriptText`'s actual
 string content, and nothing about the loaded/saved script file changes.
 
-*Why `0.5f` centers the final line*: at true max scroll, the bottom edge
-of `scrollView`'s content is flush with the bottom edge of the viewport
-(`scrollY = maxScroll = contentHeight - viewportHeight`). The text's own
-bottom edge (end of the last line, before the trailing padding) sits at
-content-relative height `topPadding + textHeight`. Its on-screen
-position at that scroll position works out to `viewportHeight -
-bottomPadding`, independent of `topPadding` and `textHeight` entirely.
-Setting `bottomPadding = viewportHeight * 0.5` therefore leaves the last
-line's bottom edge at `viewportHeight * 0.5` — the vertical midpoint —
-regardless of font size, script length, or device resolution, which is
-exactly why this fraction was chosen and why it needs no per-font-size or
-per-script special-casing.
+*Why `0.4f` lowers the final line's resting position*: at true max
+scroll, the bottom edge of `scrollView`'s content is flush with the
+bottom edge of the viewport (`scrollY = maxScroll = contentHeight -
+viewportHeight`). The text's own bottom edge (end of the last line,
+before the trailing padding) sits at content-relative height `topPadding
++ textHeight`. Its on-screen position at that scroll position works out
+to `viewportHeight - bottomPadding`, independent of `topPadding` and
+`textHeight` entirely. Setting `bottomPadding = viewportHeight *
+END_SPACE_FRACTION` therefore leaves the last line's bottom edge at
+`viewportHeight * (1 - END_SPACE_FRACTION)`: at the prior `0.5f` this was
+`viewportHeight * 0.5` (the vertical midpoint); at the current `0.4f` it
+is `viewportHeight * 0.6` (60% of the way down — lower, i.e. closer to
+the bottom edge, than before), regardless of font size, script length, or
+device resolution. This physically lower resting position was requested
+after testing on real hardware showed the prior `0.5f` value read as
+slightly too high; the `0.4f` value itself is implemented and builds
+correctly but, per this repository's own testing discipline, is not
+claimed as physically verified until it too has actually been run on a
+device — see section 26.
+
+**Full-screen padding is measured only after the system bars are
+hidden**: `resetToWaitingFromTop()` calls `enterPrompterSystemUi()`
+(section 22) before the viewport height is ever read. Hiding the status
+and navigation bars changes the usable viewport height, so measuring
+`scrollView.getHeight()` before they are hidden would compute both
+fractions against the wrong (larger, bars-still-visible) height. An
+extra `scrollView.post()` layer is inserted specifically to let that
+bar-hide's own layout pass settle before the existing height-measurement
+`post()` runs — see section 22 for the full sequencing.
 
 **Scroll-end detection** (section 20's first bullet): `performScrollTick()`
 is unmodified; `scriptText.getHeight()` (which already includes the new
@@ -1039,7 +1058,116 @@ the trailing space and resuming behaves exactly like pausing anywhere
 else in the script (section 19) — `performScrollTick()` simply continues
 its existing tick loop toward the same (unchanged) `maxScroll`.
 
-## 22. Exit and Android Back behavior
+## 22. Full-screen status and navigation bar hiding
+
+Every full-screen Prompter `UiState` (`WAITING_FOR_TAP`, `COUNTING_DOWN`,
+`SCROLLING`, `PAUSED_FULLSCREEN`, `END_OF_SCRIPT_WAITING`) hides the
+Android status bar and navigation bar, leaving only script text, Tap to
+Start, the countdown, the pause menu, or the end-of-script menu visible
+against the black background. `CONTROLS`, `FileBrowserActivity`, and
+`ScriptEditorActivity` all show normal Android system bars — this is a
+runtime, per-window concern confined to `MainActivity`'s own Window, not
+a manifest or theme change, so the other two activities (which share
+`@style/AppTheme` at the Application level, unchanged by this work) are
+automatically unaffected.
+
+**`uiState` is the sole source of truth** — there is no second
+"is full screen" boolean anywhere in `MainActivity`. Three centralized
+helper methods are the only places system-UI flags are ever touched:
+
+- `enterPrompterSystemUi()` — hides both bars. API 14–18 get the legacy
+  combination: `View.SYSTEM_UI_FLAG_HIDE_NAVIGATION` (available since API
+  14) plus the window's `WindowManager.LayoutParams.FLAG_FULLSCREEN`
+  (hides the status bar), applied via `Window.addFlags()`/
+  `View.setSystemUiVisibility()` at runtime, not by setting flags before
+  `setContentView()`. API 19+ additionally get the guarded
+  immersive-sticky set — `SYSTEM_UI_FLAG_FULLSCREEN`,
+  `SYSTEM_UI_FLAG_HIDE_NAVIGATION`, `SYSTEM_UI_FLAG_IMMERSIVE_STICKY`,
+  `SYSTEM_UI_FLAG_LAYOUT_STABLE`, `SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN`,
+  `SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION` — wrapped in a
+  `Build.VERSION.SDK_INT >= 19` guard, so a device below API 19 never
+  even references the immersive-sticky constant at runtime. No AndroidX,
+  no `WindowInsetsController`/`WindowInsetsCompat` — every flag used is a
+  platform `View`/`Window` constant compiled against `compileSdkVersion
+  23` but guarded to the API level that actually defines its behavior.
+- `exitPrompterSystemUi()` — restores normal bars: clears
+  `FLAG_FULLSCREEN` and sets `View.SYSTEM_UI_FLAG_VISIBLE` (value `0`,
+  present since API 14). Called from `exitFullScreenToControls()` (the
+  single funnel back to `CONTROLS` used by the Back to Controls button,
+  the Exit button, and every `onBackPressed()` case that returns to
+  `CONTROLS`) and from `onResume()`.
+- `reapplyPrompterSystemUiIfNeeded()` — re-issues the hidden-bar flags
+  only if `uiState != CONTROLS`, otherwise does nothing. Used in two
+  places: at the end of `handleScriptTap()`, deferred via
+  `scrollView.post()` so it runs strictly after whatever state
+  transition that same tap triggered has already been dispatched (API
+  14–18 can briefly reveal the navigation bar on any touch, with no
+  callback to detect that other than re-asserting the flags after the
+  fact); and from the new `onWindowFocusChanged(boolean hasFocus)`
+  override, when `hasFocus` is `true` (the window regaining focus after
+  the recents switcher, another app, or a system dialog/notification
+  shade).
+
+**Bars are hidden only once the app has committed to entering full
+screen**: `resetToWaitingFromTop()` (section 17/21, shared by Start
+Prompter and Restart) calls `enterPrompterSystemUi()` immediately after
+setting `uiState = WAITING_FOR_TAP` and before any padding is measured.
+Every other full-screen state is reached from `WAITING_FOR_TAP` or
+`PAUSED_FULLSCREEN` (both already full-screen with bars already hidden —
+see section 18's state diagram), so `resetToWaitingFromTop()` is the only
+place bars need to be freshly hidden on entry.
+
+**Padding is measured only after the bars are hidden and layout has
+settled** (section 21's final subsection has the padding side of this;
+this is the system-UI side): `resetToWaitingFromTop()`'s `scrollView.post()`
+chain now has an extra layer — `enterPrompterSystemUi()` runs
+synchronously, then one `scrollView.post()` is used purely to let that
+bar-hide's own layout pass complete, and only the *nested* `post()`
+inside it reads `scrollView.getHeight()` and computes the top/bottom
+padding fractions. This is a single bounded extra frame, not a loop or
+recursive re-posting — `resetToWaitingFromTop()` still runs to completion
+in a fixed, small number of layout passes every time it's called.
+
+**Restoration**: every path back to `CONTROLS` — the pause menu's Back to
+Controls, the end-of-script menu's Back to Controls, Android Back from
+`WAITING_FOR_TAP`/`PAUSED_FULLSCREEN`/`END_OF_SCRIPT_WAITING`, the Exit
+button, and `onPause()` backgrounding the app — already funnels through
+`exitFullScreenToControls()` (section 23), so adding
+`exitPrompterSystemUi()` there was sufficient; no other method needed a
+restoration call. `onResume()` additionally re-checks `uiState` on its
+own (`exitPrompterSystemUi()` if `CONTROLS`, `enterPrompterSystemUi()`
+otherwise) as a defensive measure, though in practice `onPause()` already
+forces `uiState` to `CONTROLS` before the app can ever be backgrounded,
+so the "still full-screen on resume" branch is not currently reachable —
+it exists so `onResume()` stays correct if that invariant ever changes,
+without introducing a second source of truth.
+
+**Lifecycle**: `onPause()`/`onStop()`/`onDestroy()`'s existing callback
+cleanup (`scrollHandler.removeCallbacksAndMessages(null)`) is unchanged;
+none of the scrolling/countdown lifecycle was touched by this work.
+Keep-screen-awake (`refreshStateVisibility()`, section 19) and
+system-bar hiding are deliberately kept as separate, independently
+callable concerns — neither method calls the other, and no single flag
+represents both.
+
+**Explicit constraints preserved**: this is ordinary, temporary,
+per-Activity `Window`/`View` flag manipulation — not kiosk mode, lock
+task mode, a device-owner API, root access, or an accessibility-service
+trick — and it never permanently disables Android navigation. The user
+retains whatever platform-supported way their Android version offers to
+reveal the bars (an edge swipe on API 19+ with immersive-sticky, or a
+tap revealing them on API 14–18 until `reapplyPrompterSystemUiIfNeeded()`
+re-hides them on the next tap or focus event).
+
+**Hardware verification status**: implemented and confirmed by source
+inspection and a successful build only. Neither the legacy (API 14–18)
+nor the guarded immersive-sticky (API 19+) behavior, nor the tap/focus
+reapplication logic, has been run on physical hardware as of this
+writing — see section 26 for what has and has not actually been tested
+on a device. Do not treat a successful build as evidence this behaves
+correctly on any real tablet.
+
+## 23. Exit and Android Back behavior
 
 - Exit (`btnExit`): `exitFullScreenToControls()` then `finish()` —
   always leaves the app from a clean controls-screen state first.
@@ -1082,7 +1210,7 @@ its existing tick loop toward the same (unchanged) `maxScroll`.
   unconditionally; nothing in the Back/Exit/pause-menu paths clears any
   saved preference.
 
-## 23. SharedPreferences and persisted state
+## 24. SharedPreferences and persisted state
 
 Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
 (`AppConstants`):
@@ -1109,7 +1237,7 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
 `savePreferences()` uses `SharedPreferences.Editor.commit()`
 (synchronous), not `apply()`.
 
-## 24. Build process
+## 25. Build process
 
 - The repository is a normal Gradle/Android-Gradle-Plugin project
   (`build.gradle`, `app/build.gradle`, `settings.gradle`,
@@ -1145,7 +1273,7 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
   `build.sh` and not committed to the repository (`.gitignore` excludes
   both `/build/` and `/app/build/`).
 
-## 25. Hardware testing
+## 26. Hardware testing
 
 ### Physically tested on Lenovo Smart Tab M8
 
@@ -1185,16 +1313,23 @@ not inferred here.
   stays unobstructed, no menu appears automatically, and tapping reveals
   Restart and Back to Controls.
 
-**Awaiting physical verification on the Lenovo**: the end-of-script
-vertical-centering refinement in this round — `END_SPACE_FRACTION`'s
-dynamic trailing space, and the final script line coming to rest at
-approximately the vertical midpoint of the screen rather than near the
-bottom edge — has not yet been installed and tested on this device. Do
-not claim it has been physically tested until that happens. Verified so
-far only by: successful build, `applyScriptPadding`,
-`switchScriptPaddingPreservingPosition`, and `END_SPACE_FRACTION`
-confirmed present in the compiled `classes.dex`, and v1/v2 signature and
-zipalign checks.
+**Awaiting physical verification on the Lenovo**: neither the prior
+`END_SPACE_FRACTION = 0.5f` end-of-script vertical-centering refinement
+nor this round's two further refinements — lowering that resting
+position to `END_SPACE_FRACTION = 0.4f` (section 21), and hiding the
+status/navigation bars throughout full-screen Prompter mode (section
+22) — has been installed and tested on this device. Do not claim any of
+these has been physically tested until that happens. Verified so far
+only by: successful build, `applyScriptPadding`,
+`switchScriptPaddingPreservingPosition`, `enterPrompterSystemUi`,
+`exitPrompterSystemUi`, `reapplyPrompterSystemUiIfNeeded`,
+`onWindowFocusChanged`, and `END_SPACE_FRACTION` all confirmed present
+in the compiled `classes.dex`, and v1/v2 signature and zipalign checks.
+In particular, the API 14–18 legacy system-bar behavior, the API 19+
+guarded immersive-sticky behavior, and the tap/window-focus reapplication
+logic are all unverified on real hardware — this device's exact Android
+version is not recorded in this repository (see above), so which of
+those two code paths it would even exercise is not known.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -1219,9 +1354,13 @@ version.
   useful compact-layout test in addition to the Lenovo.
 
 **Awaiting physical verification on the Nexus 7**: the same
-end-of-script vertical-centering refinement described above for the
-Lenovo — not yet installed or tested on this device either, since the
-corrected APK postdates this device's most recent testing session.
+end-of-script vertical-centering refinements and the status/navigation
+bar hiding described above for the Lenovo — none of it has been
+installed or tested on this device either, since the corrected APK
+postdates this device's most recent testing session. This device runs
+API 23, so it would exercise the guarded API 19+ immersive-sticky code
+path specifically, which remains as unverified on hardware as the legacy
+path.
 
 ### Acer Iconia Tab A500
 
@@ -1238,7 +1377,13 @@ tap-to-show/hide gesture over the auto-scrolling `ScrollView`,
 real-world auto-scroll smoothness on weaker hardware, the exact
 on-device rendering of the launcher icon and button-background
 drawables, and whether the A500's microSD mount path is among the
-legacy paths already checked (section 6).
+legacy paths already checked (section 6). The A500 runs API 14, so it is
+the only device in this project's history that would exercise the legacy
+(API 14–18) system-bar hiding path (section 22) rather than the guarded
+API 19+ immersive-sticky path — that legacy path, including whether a
+touch actually reveals the navigation bar on this specific device and
+whether `reapplyPrompterSystemUiIfNeeded()` correctly re-hides it, is
+entirely unverified on real hardware.
 
 ### Android version warning: device- and version-dependent, not universal
 
@@ -1266,7 +1411,7 @@ not change:
 `minSdkVersion`/`targetSdkVersion` remain 14; this project is not
 redefined as a modern-Android application by any of the above.
 
-## 26. Artwork and launcher icons
+## 27. Artwork and launcher icons
 
 - Source artwork lives under `artwork/`: `DroidPrompt-bg.png` (solid
   background variant) and `DroidPrompt-trans.png` (transparent
@@ -1290,7 +1435,7 @@ redefined as a modern-Android application by any of the above.
   Nothing in the current source treats "DroidPrompt" as the application
   name; it only appears in the two artwork filenames.
 
-## 27. Known limitations and future ideas
+## 28. Known limitations and future ideas
 
 Not implemented — listed only to say so explicitly, per instruction not
 to present these as current functionality:
@@ -1306,7 +1451,7 @@ to present these as current functionality:
   described in section 11/25 — implemented and compiled, not yet
   confirmed on a physical device since being added.
 
-## 28. Change and release discipline
+## 29. Change and release discipline
 
 Intended practice going forward (not yet practiced in this repository's
 history — no tags exist yet, and there is no prior tagged known-good

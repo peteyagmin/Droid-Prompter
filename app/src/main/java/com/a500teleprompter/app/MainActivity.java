@@ -5,12 +5,14 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
@@ -69,7 +71,7 @@ public class MainActivity extends Activity {
     private static final long COUNTDOWN_INTERVAL_MS = 1000;
 
     private static final float OPENING_SPACE_FRACTION = 0.775f;
-    private static final float END_SPACE_FRACTION = 0.5f;
+    private static final float END_SPACE_FRACTION = 0.4f;
     private static final float SCRIPT_PADDING_DP = 24f;
 
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
@@ -325,6 +327,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (uiState == UiState.CONTROLS) {
+            exitPrompterSystemUi();
+        } else {
+            enterPrompterSystemUi();
+        }
         if (pendingRestoreScrollY >= 0) {
             final int restoreY = pendingRestoreScrollY;
             pendingRestoreScrollY = -1;
@@ -334,6 +341,25 @@ public class MainActivity extends Activity {
                     scrollView.scrollTo(0, restoreY);
                 }
             });
+        }
+    }
+
+    /**
+     * Reapplies the hidden-bar flags whenever the window regains focus
+     * while a full-screen Prompter state is active -- covering both the
+     * app returning from the recent-apps switcher/another app and, on API
+     * 14-18, a system dialog or the notification shade briefly stealing
+     * focus and reverting the legacy flags. uiState is the only thing
+     * consulted (no separate fullscreen boolean): CONTROLS is left alone
+     * since normal system bars are already correct there. This never
+     * triggers a state transition of its own -- it only re-issues system
+     * UI flags for whatever state uiState already holds.
+     */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            reapplyPrompterSystemUiIfNeeded();
         }
     }
 
@@ -622,6 +648,13 @@ public class MainActivity extends Activity {
      * the end of the script during WAITING_FOR_TAP can no longer happen
      * -- that now routes through END_OF_SCRIPT_WAITING instead (see
      * stopScrollingAtEnd()) -- so this no longer branches on atScriptEnd.
+     *
+     * A tap that reaches this method is always on the full-screen script
+     * (the CONTROLS case is a no-op), and on API 14-18 a touch can briefly
+     * reveal the navigation bar regardless of which state-transition
+     * branch above ran. The reapply is deferred via scrollView.post() so
+     * it runs strictly after whatever state transition this same tap
+     * triggered has already been dispatched, rather than racing it.
      */
     private void handleScriptTap() {
         switch (uiState) {
@@ -649,6 +682,12 @@ public class MainActivity extends Activity {
                 // (only reachable by scrolling it manually) is a no-op.
                 break;
         }
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                reapplyPrompterSystemUiIfNeeded();
+            }
+        });
     }
 
     /**
@@ -684,6 +723,56 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Hides the status bar and navigation bar for full-screen Prompter
+     * mode. API 14-18 get the legacy combination (SYSTEM_UI_FLAG_HIDE_
+     * NAVIGATION + the window's FLAG_FULLSCREEN); API 19+ additionally get
+     * the guarded immersive-sticky flag set, which keeps the bars hidden
+     * across a system-triggered edge swipe instead of leaving them shown
+     * until the next tap. This is a temporary, per-Activity, platform-
+     * supported flag combination -- not kiosk mode, lock task mode, a
+     * device-owner API, or any other trick that would keep the user from
+     * revealing navigation through a supported gesture.
+     */
+    private void enterPrompterSystemUi() {
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+        if (Build.VERSION.SDK_INT >= 19) {
+            flags |= View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        }
+        getWindow().getDecorView().setSystemUiVisibility(flags);
+    }
+
+    /**
+     * Restores normal status/navigation bars. Called only from
+     * exitFullScreenToControls() (the single funnel back to CONTROLS) and
+     * onResume(), so every path back to the controls screen restores the
+     * bars the same way.
+     */
+    private void exitPrompterSystemUi() {
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+    }
+
+    /**
+     * Re-issues the hidden-bar flags if (and only if) uiState is still a
+     * full-screen Prompter state -- uiState is the sole source of truth,
+     * never a second boolean. Used after a script tap (API 14-18 can
+     * briefly reveal the navigation bar on touch, with no event to detect
+     * that other than re-asserting the flags after the tap's own state
+     * transition has been dispatched) and when the window regains focus.
+     */
+    private void reapplyPrompterSystemUiIfNeeded() {
+        if (uiState != UiState.CONTROLS) {
+            enterPrompterSystemUi();
+        }
+    }
+
+    /**
      * Shared by enterFullScreenWaitingFromControls() and
      * restartFromPauseMenu(): resets to WAITING_FOR_TAP at the very top of
      * the script with both the full-screen opening buffer (top) and
@@ -699,33 +788,48 @@ public class MainActivity extends Activity {
      * fresh here on every full-screen entry is enough to keep the opening
      * position and the eventual end-of-script centering correct at any
      * font size, on any screen, for any script.
+     *
+     * The system bars are hidden before any of this is measured: hiding
+     * them changes the usable viewport height, so measuring first and
+     * hiding bars afterward would leave the padding computed against the
+     * wrong height. enterPrompterSystemUi() is called synchronously, then
+     * an extra scrollView.post() layer is inserted ahead of the existing
+     * height-measurement post() specifically to let that bar-hide's own
+     * layout pass settle first -- a single bounded extra frame, not a
+     * loop -- before scrollView.getHeight() is trusted.
      */
     private void resetToWaitingFromTop() {
         scrollHandler.removeCallbacksAndMessages(null);
         atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
         refreshStateVisibility();
+        enterPrompterSystemUi();
         // The dynamic paddings depend on the full-screen viewport height,
-        // which is only accurate after controlsPanel's visibility change
-        // (just requested above) has actually been laid out -- hence the
-        // post()-after-layout pattern used elsewhere in this class. A
-        // second, nested post() waits for that padding change to be laid
-        // out in turn before scrolling to 0, though scrollTo(0, 0) itself
-        // needs no measurement to be valid.
+        // which is only accurate after both controlsPanel's visibility
+        // change and the system-bar hide above have actually been laid
+        // out -- hence the post()-after-layout pattern used elsewhere in
+        // this class. A further, nested post() waits for the padding
+        // change itself to be laid out before scrolling to 0, though
+        // scrollTo(0, 0) itself needs no measurement to be valid.
         scrollView.post(new Runnable() {
             @Override
             public void run() {
-                int fullScreenHeightPx = scrollView.getHeight();
-                int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-                int newTopPaddingPx = Math.max(sidePaddingPx,
-                        Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
-                int newBottomPaddingPx = Math.max(sidePaddingPx,
-                        Math.round(fullScreenHeightPx * END_SPACE_FRACTION));
-                applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
                 scrollView.post(new Runnable() {
                     @Override
                     public void run() {
-                        scrollView.scrollTo(0, 0);
+                        int fullScreenHeightPx = scrollView.getHeight();
+                        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+                        int newTopPaddingPx = Math.max(sidePaddingPx,
+                                Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
+                        int newBottomPaddingPx = Math.max(sidePaddingPx,
+                                Math.round(fullScreenHeightPx * END_SPACE_FRACTION));
+                        applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
+                        scrollView.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                scrollView.scrollTo(0, 0);
+                            }
+                        });
                     }
                 });
             }
@@ -799,6 +903,7 @@ public class MainActivity extends Activity {
         stopPreviewScrolling();
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
+        exitPrompterSystemUi();
         int minimalPaddingPx = dpToPx(SCRIPT_PADDING_DP);
         switchScriptPaddingPreservingPosition(minimalPaddingPx, minimalPaddingPx, null);
     }

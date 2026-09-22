@@ -78,10 +78,17 @@ difference is the most likely place to look.
 7. The app switches to full-screen mode, using the existing opening
    buffer so the first line starts well down the screen rather than at
    the very top.
-8. **Tap to Start** appears.
-9. Tapping begins a five-second countdown.
-10. Automatic scrolling begins once the countdown finishes.
-11. Tapping the screen (or pressing Android Back) at any point while
+8. Full-screen Prompter mode also hides the Android status bar and
+   navigation bar for a clean, distraction-free black display — only
+   script text, Tap to Start, the countdown, or a menu is ever shown.
+   Bars return automatically as soon as you go back to the control
+   screen. Depending on your Android version, briefly touching the edge
+   of the screen may temporarily reveal system navigation again; this is
+   normal platform behavior, not a bug.
+9. **Tap to Start** appears.
+10. Tapping begins a five-second countdown.
+11. Automatic scrolling begins once the countdown finishes.
+12. Tapping the screen (or pressing Android Back) at any point while
     scrolling pauses immediately, in place, and opens the full-screen
     pause menu:
 
@@ -95,22 +102,22 @@ difference is the most likely place to look.
 
     The pause menu blocks taps to the script underneath it, and is never
     mirrored even when Mirror is on.
-12. There is no separate Pause button — pausing is a side effect of
+13. There is no separate Pause button — pausing is a side effect of
     tapping the script (or Back) while it's scrolling.
-13. There is no separate Return to Top or Return to Beginning button —
+14. There is no separate Return to Top or Return to Beginning button —
     Restart (from the pause menu) or Start Prompter again (from the
     controls) serve that role.
-14. Automatic scrolling continues past the last line until it reaches a
-    comfortable, centered reading position — approximately the vertical
-    middle of the screen — rather than stopping with the final line
-    crammed against the bottom edge. Once there, scrolling stops and the
-    final text stays fully visible and unobstructed — no menu, no
-    overlay — and the screen stays awake, so there's no rush to finish
-    reading it. A tap then reveals the end-of-script menu, with only
-    **Restart** and **Back to Controls** offered (no Resume — there's
-    nothing left to scroll to). Android Back at this point skips the
-    menu and goes straight to the control screen.
-15. Preview scrolling (control screen) and full-screen Prompter
+15. Automatic scrolling continues past the last line until it reaches a
+    comfortable reading position a little below the vertical middle of
+    the screen — rather than stopping with the final line crammed
+    against the bottom edge. Once there, scrolling stops and the final
+    text stays fully visible and unobstructed — no menu, no overlay —
+    and the screen stays awake, so there's no rush to finish reading it.
+    A tap then reveals the end-of-script menu, with only **Restart** and
+    **Back to Controls** offered (no Resume — there's nothing left to
+    scroll to). Android Back at this point skips the menu and goes
+    straight to the control screen.
+16. Preview scrolling (control screen) and full-screen Prompter
     scrolling are always independent — starting or stopping one never
     starts, stops, or otherwise affects the other, even though both use
     the same Speed setting.
@@ -341,7 +348,7 @@ app/build/outputs/apk/debug/app-debug.apk
 `compileSdkVersion 23` is used only because that is the newest platform
 available through Ubuntu's archive; the app still only calls APIs
 available at level 14, and `minSdkVersion`/`targetSdkVersion` remain 14.
-See `PROJECT_SPEC.md` section 24 for the full step-by-step pipeline.
+See `PROJECT_SPEC.md` section 25 for the full step-by-step pipeline.
 
 ## Installing on a supported (Android 4.0–13) tablet
 
@@ -382,10 +389,12 @@ here). Confirmed on this device:
   tap, then the reduced Restart/Back to Controls menu) is physically
   tested and functional.
 
-**Awaiting physical verification**: this round's refinement — automatic
-scrolling continuing past the last line to a centered reading position,
-instead of stopping with it near the bottom edge — has not yet been
-installed and tested on this device.
+**Awaiting physical verification**: neither the earlier refinement
+(automatic scrolling continuing past the last line to a centered reading
+position instead of stopping near the bottom edge) nor this round's two
+further refinements — lowering that resting position slightly, and
+hiding the status/navigation bars throughout full-screen Prompter mode —
+have been installed and tested on this device.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -400,9 +409,10 @@ Resume/Restart/Back to Controls, and the end-of-script behavior. Its
 smaller screen than the Lenovo's makes it a useful additional
 compact-layout check.
 
-**Awaiting physical verification**: the same centered-scrolling
-refinement described above for the Lenovo has not yet been tested on
-this device either.
+**Awaiting physical verification**: the same refinements described above
+for the Lenovo have not yet been tested on this device either. Running
+API 23, this device would specifically exercise the newer immersive-mode
+system-bar behavior rather than the older device's legacy path.
 
 ### Acer Iconia Tab A500
 

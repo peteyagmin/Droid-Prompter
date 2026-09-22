@@ -24,7 +24,7 @@ report the discrepancy before proceeding.
 - Original target hardware: Acer Iconia Tab A500 running Android 4.0.
 - Physically tested devices: Lenovo Smart Tab M8 and an ASUS Nexus 7
   (2013, second generation, Android 6.0.1/API 23) — see `PROJECT_SPEC.md`
-  section 25 for exactly what has and has not been confirmed on each.
+  section 26 for exactly what has and has not been confirmed on each.
   The "designed for an older Android version" first-launch warning is
   device/version-dependent: observed on the Lenovo, not on the Nexus 7.
   Don't generalize either device's behavior to other devices.
@@ -87,8 +87,23 @@ report the discrepancy before proceeding.
   until the user taps. Only then should Restart and Back to Controls
   appear. Resume must not appear at the end.
 - Full-screen scrolling must continue until the final script line
-  reaches approximately the vertical center of the display. Only then
-  may the app enter `END_OF_SCRIPT_WAITING`.
+  reaches its trailing-space resting position (currently `END_SPACE_
+  FRACTION = 0.4f`, a bit below the vertical center of the display).
+  Only then may the app enter `END_OF_SCRIPT_WAITING`.
+- Full-screen Prompter states (`WAITING_FOR_TAP`, `COUNTING_DOWN`,
+  `SCROLLING`, `PAUSED_FULLSCREEN`, `END_OF_SCRIPT_WAITING`) must hide
+  the Android status bar and navigation bar; `CONTROLS`,
+  `FileBrowserActivity`, and `ScriptEditorActivity` must show normal
+  system bars. Use `uiState` as the sole source of truth for this — no
+  second fullscreen boolean — and keep all system-UI flag manipulation
+  inside the dedicated helper methods (`enterPrompterSystemUi()` /
+  `exitPrompterSystemUi()` / `reapplyPrompterSystemUiIfNeeded()`), never
+  scattered across unrelated methods. Keep this separate from
+  keep-screen-awake handling — they are different concerns.
+- Full-screen padding (`OPENING_SPACE_FRACTION`/`END_SPACE_FRACTION`)
+  must be measured from `scrollView.getHeight()` only after the system
+  bars are hidden and that layout change has settled — hiding the bars
+  changes the usable viewport height.
 
 ## Current UI facts that must not be inferred incorrectly
 
@@ -158,7 +173,7 @@ report the discrepancy before proceeding.
 After any APK-affecting change:
 
 1. Build the debug APK with `./build.sh` (the existing verified offline
-   pipeline — see `PROJECT_SPEC.md` section 24).
+   pipeline — see `PROJECT_SPEC.md` section 25).
 2. Verify v1 and v2 signatures (`apksigner verify`).
 3. Verify zip alignment (`zipalign -c`).
 4. Confirm `minSdkVersion`/`targetSdkVersion` remain 14
