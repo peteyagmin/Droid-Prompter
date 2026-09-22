@@ -22,7 +22,7 @@ report the discrepancy before proceeding.
 - Purpose: a lightweight, offline teleprompter designed primarily to give
   older Android tablets a useful second life.
 - Original target hardware: Acer Iconia Tab A500 running Android 4.0.
-- Physically tested devices: Lenovo Smart Tab M8, an ASUS Nexus 7 (2013,
+- Physically tested devices: Lenovo Smart Tab M8 (Android 10/API29), an ASUS Nexus 7 (2013,
   second generation, Android 6.0.1/API 23), and the Acer Iconia Tab A500
   itself — see `PROJECT_SPEC.md` section 26 for exactly what has and has
   not been confirmed on each. The "designed for an older Android
