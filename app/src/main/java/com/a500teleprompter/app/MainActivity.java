@@ -23,14 +23,27 @@ import java.io.File;
 public class MainActivity extends Activity {
 
     /**
-     * The four teleprompter states. Exactly one tap-driven transition is
+     * The five teleprompter states. Exactly one tap-driven transition is
      * allowed out of any given state; see {@link #handleScriptTap()}.
      */
     private enum UiState {
         CONTROLS,
         WAITING_FOR_TAP,
         COUNTING_DOWN,
-        SCROLLING
+        SCROLLING,
+        PAUSED_FULLSCREEN
+    }
+
+    /**
+     * COUNTING_DOWN is reached from two different places -- the initial
+     * Start Prompter/Restart flow (from WAITING_FOR_TAP) and the pause
+     * menu's Resume button (from PAUSED_FULLSCREEN) -- and canceling the
+     * countdown must return to whichever of those it came from, not
+     * always the same state.
+     */
+    private enum CountdownOrigin {
+        INITIAL_START,
+        RESUME
     }
 
     private static final int REQUEST_CODE_BROWSE_FILE = 100;
@@ -61,6 +74,8 @@ public class MainActivity extends Activity {
     private TextView scriptText;
     private TextView countdownText;
     private TextView tapInstructionText;
+    private View pauseMenuOverlay;
+    private Button btnResume;
     private TextView currentFileLabel;
     private TextView fontSizeLabel;
     private TextView speedLabel;
@@ -78,6 +93,7 @@ public class MainActivity extends Activity {
     private GestureDetector tapDetector;
 
     private UiState uiState = UiState.CONTROLS;
+    private CountdownOrigin countdownOrigin = CountdownOrigin.INITIAL_START;
     private boolean atScriptEnd = false;
     private boolean previewScrolling = false;
     private int countdownRemaining;
@@ -99,6 +115,8 @@ public class MainActivity extends Activity {
         scriptText = (TextView) findViewById(R.id.scriptText);
         countdownText = (TextView) findViewById(R.id.countdownText);
         tapInstructionText = (TextView) findViewById(R.id.tapInstructionText);
+        pauseMenuOverlay = findViewById(R.id.pauseMenuOverlay);
+        btnResume = (Button) findViewById(R.id.btnResume);
         currentFileLabel = (TextView) findViewById(R.id.currentFileLabel);
         fontSizeLabel = (TextView) findViewById(R.id.fontSizeLabel);
         speedLabel = (TextView) findViewById(R.id.speedLabel);
@@ -113,6 +131,8 @@ public class MainActivity extends Activity {
         Button btnFontDecrease = (Button) findViewById(R.id.btnFontDecrease);
         Button btnFontIncrease = (Button) findViewById(R.id.btnFontIncrease);
         Button btnExit = (Button) findViewById(R.id.btnExit);
+        Button btnRestart = (Button) findViewById(R.id.btnRestart);
+        Button btnBackToControls = (Button) findViewById(R.id.btnBackToControls);
 
         loadPreferences();
         applyFontSize();
@@ -245,6 +265,27 @@ public class MainActivity extends Activity {
             }
         });
 
+        btnResume.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startCountdown(CountdownOrigin.RESUME);
+            }
+        });
+
+        btnRestart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                restartFromPauseMenu();
+            }
+        });
+
+        btnBackToControls.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                exitFullScreenToControls();
+            }
+        });
+
         mirrorToggle.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
@@ -313,11 +354,30 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (uiState != UiState.CONTROLS) {
-            exitFullScreenToControls();
-            return;
+        switch (uiState) {
+            case SCROLLING:
+                // Mirrors a script-area tap during SCROLLING: pause into
+                // the full-screen pause menu rather than leaving full
+                // screen immediately.
+                pauseFullScreenScrolling();
+                break;
+            case PAUSED_FULLSCREEN:
+                // Same behavior as pressing Back to Controls.
+                exitFullScreenToControls();
+                break;
+            case COUNTING_DOWN:
+                // cancelCountdown() already returns to WAITING_FOR_TAP or
+                // PAUSED_FULLSCREEN based on countdownOrigin.
+                cancelCountdown();
+                break;
+            case WAITING_FOR_TAP:
+                exitFullScreenToControls();
+                break;
+            case CONTROLS:
+            default:
+                finish();
+                break;
         }
-        finish();
     }
 
     @Override
@@ -404,7 +464,7 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Enter Prompter, Edit Script, and Preview only make sense once a valid
+     * Start Prompter, Edit Script, and Preview only make sense once a valid
      * script is loaded; Load Script, New Script, Mirror, and Exit remain
      * available regardless. Called after every change to loadedFilePath so
      * the three buttons can never disagree with whether a script is loaded.
@@ -523,22 +583,27 @@ public class MainActivity extends Activity {
 
     /**
      * Routes a single tap on the script area to exactly one state
-     * transition, based on the state the app is in right now.
+     * transition, based on the state the app is in right now. Reaching
+     * the end of the script during WAITING_FOR_TAP can no longer happen
+     * -- that now routes through PAUSED_FULLSCREEN instead (see
+     * stopScrollingAtEnd()) -- so this no longer branches on atScriptEnd.
      */
     private void handleScriptTap() {
         switch (uiState) {
             case WAITING_FOR_TAP:
-                if (atScriptEnd) {
-                    exitFullScreenToControls();
-                } else {
-                    startCountdown();
-                }
+                startCountdown(CountdownOrigin.INITIAL_START);
                 break;
             case COUNTING_DOWN:
-                cancelCountdownToWaiting();
+                cancelCountdown();
                 break;
             case SCROLLING:
-                exitFullScreenToControls();
+                pauseFullScreenScrolling();
+                break;
+            case PAUSED_FULLSCREEN:
+                // The pause menu overlay is clickable and covers the full
+                // screen while visible, so a tap never actually reaches
+                // here in practice; kept explicit rather than falling
+                // through to default.
                 break;
             case CONTROLS:
             default:
@@ -549,14 +614,12 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Enter Prompter always begins a fresh full-screen session from the very
-     * top of the script -- regardless of the prior manual preview position,
-     * where Preview scrolling was stopped, a paused full-screen position
-     * from an earlier session, or whether the previous session reached the
-     * end. This deliberately bypasses switchTopPaddingPreservingPosition's
-     * delta-preserving logic (reserved for exitFullScreenToControls(),
-     * where pausing mid-script and returning to the preview should keep the
-     * same passage on screen) and jumps straight to scrollY 0 instead.
+     * Start Prompter always begins a fresh full-screen session from the
+     * very top of the script -- regardless of the prior manual preview
+     * position, where Preview scrolling was stopped, a paused full-screen
+     * position from an earlier session, or whether the previous session
+     * reached the end. Only reachable from CONTROLS; Restart reaches the
+     * same reset from PAUSED_FULLSCREEN via resetToWaitingFromTop().
      */
     private void enterFullScreenWaitingFromControls() {
         if (uiState != UiState.CONTROLS) {
@@ -566,11 +629,36 @@ public class MainActivity extends Activity {
             Toast.makeText(this, R.string.no_script_loaded, Toast.LENGTH_SHORT).show();
             return;
         }
-        scrollHandler.removeCallbacksAndMessages(null);
         stopPreviewScrolling();
+        resetToWaitingFromTop();
+    }
+
+    /**
+     * Restart, pressed from the full-screen pause menu: behaves exactly
+     * like Start Prompter, except the app was already in full-screen mode
+     * (PAUSED_FULLSCREEN, not CONTROLS) and never leaves it.
+     */
+    private void restartFromPauseMenu() {
+        if (uiState != UiState.PAUSED_FULLSCREEN) {
+            return;
+        }
+        resetToWaitingFromTop();
+    }
+
+    /**
+     * Shared by enterFullScreenWaitingFromControls() and
+     * restartFromPauseMenu(): resets to WAITING_FOR_TAP at the very top of
+     * the script with the full-screen opening buffer applied, ready for a
+     * fresh tap-to-start. This deliberately bypasses
+     * switchTopPaddingPreservingPosition()'s delta-preserving logic
+     * (reserved for exitFullScreenToControls(), where pausing mid-script
+     * and returning to the preview should keep the same passage on
+     * screen) and jumps straight to scrollY 0 instead.
+     */
+    private void resetToWaitingFromTop() {
+        scrollHandler.removeCallbacksAndMessages(null);
         atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
-        scriptText.setKeepScreenOn(false);
         refreshStateVisibility();
         // The dynamic opening-buffer padding depends on the full-screen
         // viewport height, which is only accurate after controlsPanel's
@@ -597,14 +685,19 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void startCountdown() {
-        if (uiState != UiState.WAITING_FOR_TAP) {
+    /**
+     * Reachable from WAITING_FOR_TAP (a fresh Start Prompter/Restart tap)
+     * or PAUSED_FULLSCREEN (the pause menu's Resume button); origin is
+     * recorded so cancelCountdown() knows which of those to return to.
+     */
+    private void startCountdown(CountdownOrigin origin) {
+        if (uiState != UiState.WAITING_FOR_TAP && uiState != UiState.PAUSED_FULLSCREEN) {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
+        countdownOrigin = origin;
         uiState = UiState.COUNTING_DOWN;
         countdownRemaining = COUNTDOWN_START_VALUE;
-        scriptText.setKeepScreenOn(true);
         refreshStateVisibility();
         scrollHandler.post(countdownRunnable);
     }
@@ -622,37 +715,58 @@ public class MainActivity extends Activity {
         scrollHandler.postDelayed(countdownRunnable, COUNTDOWN_INTERVAL_MS);
     }
 
-    private void cancelCountdownToWaiting() {
+    /**
+     * Cancels an in-progress countdown and returns to whichever stationary
+     * full-screen state it was started from, preserving the current
+     * script position either way (neither state touches scrollView while
+     * the countdown runs, so there is nothing to restore).
+     */
+    private void cancelCountdown() {
         if (uiState != UiState.COUNTING_DOWN) {
             return;
         }
         scrollHandler.removeCallbacksAndMessages(null);
-        scriptText.setKeepScreenOn(false);
-        uiState = UiState.WAITING_FOR_TAP;
+        uiState = countdownOrigin == CountdownOrigin.RESUME
+                ? UiState.PAUSED_FULLSCREEN
+                : UiState.WAITING_FOR_TAP;
         refreshStateVisibility();
     }
 
     private void beginActiveScrolling() {
         scrollHandler.removeCallbacksAndMessages(null);
         uiState = UiState.SCROLLING;
-        scriptText.setKeepScreenOn(true);
         refreshStateVisibility();
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
 
     /**
-     * Leaves full-screen mode from any state (waiting, counting down, or
-     * scrolling) and returns to the controls screen, canceling any pending
-     * countdown/scroll callbacks and preserving the current scroll
-     * position. Safe to call when already on the controls screen.
+     * Leaves full-screen mode from any state (waiting, counting down,
+     * scrolling, or paused) and returns to the controls screen -- this is
+     * also exactly what the pause menu's Back to Controls button does --
+     * canceling any pending countdown/scroll callbacks and preserving the
+     * current scroll position. Safe to call when already on the controls
+     * screen.
      */
     private void exitFullScreenToControls() {
         scrollHandler.removeCallbacksAndMessages(null);
         stopPreviewScrolling();
-        scriptText.setKeepScreenOn(false);
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
         switchTopPaddingPreservingPosition(dpToPx(SCRIPT_PADDING_DP), null);
+    }
+
+    /**
+     * A tap on the full-screen script (or Android Back) during SCROLLING:
+     * stop immediately, keep the exact current position, and show the
+     * pause menu without ever touching CONTROLS or the scroll position.
+     */
+    private void pauseFullScreenScrolling() {
+        if (uiState != UiState.SCROLLING) {
+            return;
+        }
+        scrollHandler.removeCallbacksAndMessages(null);
+        uiState = UiState.PAUSED_FULLSCREEN;
+        refreshStateVisibility();
     }
 
     private void performScrollTick() {
@@ -676,15 +790,16 @@ public class MainActivity extends Activity {
 
     /**
      * The script reached its end during active scrolling: stop, but stay
-     * in full-screen mode (waiting for a tap) rather than forcing the user
-     * back to the controls screen. "Tap to Start" is suppressed in this
-     * flavor of WAITING_FOR_TAP since there is no more content to scroll.
+     * in full-screen mode rather than forcing the user back to the
+     * controls screen. This shows the same pause menu a mid-script tap
+     * would, but with atScriptEnd true, refreshStateVisibility() hides
+     * Resume -- there is nothing left to resume into -- leaving only
+     * Restart and Back to Controls, per the reduced end-of-script menu.
      */
     private void stopScrollingAtEnd() {
         scrollHandler.removeCallbacksAndMessages(null);
-        scriptText.setKeepScreenOn(false);
         atScriptEnd = true;
-        uiState = UiState.WAITING_FOR_TAP;
+        uiState = UiState.PAUSED_FULLSCREEN;
         refreshStateVisibility();
     }
 
@@ -762,17 +877,29 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * Single source of truth for what the countdown, "Tap to Start", and
-     * controls overlays show, driven entirely by uiState (and atScriptEnd
-     * for the one WAITING_FOR_TAP special case). Called at the end of
-     * every state transition so the three overlays can never drift out of
-     * sync with each other.
+     * Single source of truth for what the controls panel, countdown,
+     * "Tap to Start", and pause menu show, and for whether the screen
+     * stays awake -- all driven entirely by uiState (and atScriptEnd for
+     * the WAITING_FOR_TAP/PAUSED_FULLSCREEN special cases). Called at the
+     * end of every state transition so none of these can drift out of
+     * sync with each other. Every full-screen state (everything except
+     * CONTROLS) keeps the screen awake; only CONTROLS clears it, which
+     * also covers the Activity being paused/stopped/destroyed since
+     * onPause() always routes through exitFullScreenToControls() first.
+     * Preview's own keep-screen-awake handling is separate and untouched
+     * here, since Preview only ever runs while uiState stays CONTROLS.
      */
     private void refreshStateVisibility() {
         controlsPanel.setVisibility(uiState == UiState.CONTROLS ? View.VISIBLE : View.GONE);
         countdownText.setVisibility(uiState == UiState.COUNTING_DOWN ? View.VISIBLE : View.GONE);
         boolean showTapInstruction = uiState == UiState.WAITING_FOR_TAP && !atScriptEnd;
         tapInstructionText.setVisibility(showTapInstruction ? View.VISIBLE : View.GONE);
+        boolean showPauseMenu = uiState == UiState.PAUSED_FULLSCREEN;
+        pauseMenuOverlay.setVisibility(showPauseMenu ? View.VISIBLE : View.GONE);
+        if (showPauseMenu) {
+            btnResume.setVisibility(atScriptEnd ? View.GONE : View.VISIBLE);
+        }
+        scriptText.setKeepScreenOn(uiState != UiState.CONTROLS);
     }
 
     private int computeScrollPixelsPerTick() {

@@ -14,11 +14,14 @@ this project is developed under, see [`CLAUDE.md`](CLAUDE.md).
 ## Features
 
 - Large, scrollable script display: white text on a black background.
-- **Enter Prompter** for the full-screen countdown-then-auto-scroll
-  teleprompter mode; tapping the script while it's scrolling pauses
-  immediately and returns to the control screen. There is no separate
-  Pause button and no Return to Top / Return to Beginning button — tap to
-  pause, press Enter Prompter again to restart from the top.
+- **Start Prompter** for the full-screen countdown-then-auto-scroll
+  teleprompter mode; tapping the script (or Android Back) while it's
+  scrolling pauses immediately, in place, and opens a full-screen pause
+  menu with **Resume**, **Restart**, and **Back to Controls** — the app
+  never silently drops back to the control screen mid-script. There is no
+  separate Pause button and no Return to Top / Return to Beginning
+  button; Restart (or Start Prompter again from the controls) is how you
+  get back to the top.
 - **Preview** / **Stop** on the control screen, to test auto-scrolling at
   the current speed without entering full-screen mode.
 - Adjustable auto-scroll speed via a **Speed** `SeekBar`, with the
@@ -67,9 +70,9 @@ difference is the most likely place to look.
 3. Optionally press **Preview** to test automatic scrolling at the
    current speed without entering full-screen mode; press it again
    (now labeled **Stop**) to stop.
-4. Press **Enter Prompter** when ready.
-5. Enter Prompter stops Preview scrolling if it's running.
-6. Enter Prompter always returns the script to the very beginning,
+4. Press **Start Prompter** when ready.
+5. Start Prompter stops Preview scrolling if it's running.
+6. Start Prompter always returns the script to the very beginning,
    regardless of where Preview or a previous full-screen session left
    off.
 7. The app switches to full-screen mode, using the existing opening
@@ -78,14 +81,29 @@ difference is the most likely place to look.
 8. **Tap to Start** appears.
 9. Tapping begins a five-second countdown.
 10. Automatic scrolling begins once the countdown finishes.
-11. Tapping the screen at any point while scrolling pauses immediately
-    and returns to the control screen.
-12. There is no separate Pause button.
+11. Tapping the screen (or pressing Android Back) at any point while
+    scrolling pauses immediately, in place, and opens the full-screen
+    pause menu:
+
+    - **Resume** — runs the same five-second countdown, then continues
+      scrolling from exactly where it paused.
+    - **Restart** — returns to the very top of the script and shows
+      **Tap to Start** again, without leaving full-screen mode.
+    - **Back to Controls** — leaves full-screen mode and returns to the
+      control screen, preserving roughly the same passage in the
+      control-screen preview.
+
+    The pause menu blocks taps to the script underneath it, and is never
+    mirrored even when Mirror is on.
+12. There is no separate Pause button — pausing is a side effect of
+    tapping the script (or Back) while it's scrolling.
 13. There is no separate Return to Top or Return to Beginning button —
-    tapping to return to the control screen, then pressing Enter
-    Prompter again (which restarts from the top), together serve that
-    role.
-14. Preview scrolling (control screen) and full-screen Prompter
+    Restart (from the pause menu) or Start Prompter again (from the
+    controls) serve that role.
+14. Reaching the very end of the script also pauses into the full-screen
+    menu, but with Resume hidden (there's nothing left to resume) —
+    only Restart and Back to Controls are offered.
+15. Preview scrolling (control screen) and full-screen Prompter
     scrolling are always independent — starting or stopping one never
     starts, stops, or otherwise affects the other, even though both use
     the same Speed setting.
@@ -343,8 +361,8 @@ Physically tested. Confirmed on this device:
 
 - Normal sideloading works (subject to the one-time legacy-app warning
   described above).
-- Core teleprompter functionality: loading a script, Enter Prompter, the
-  countdown, auto-scrolling, tap-to-pause/resume, Exit.
+- Core teleprompter functionality: loading a script, starting the
+  Prompter, the countdown, auto-scrolling, Exit.
 - Built-in file browsing.
 - Preview scrolling on the control screen.
 - New Script and Edit Script (creating and saving a script, editing and
@@ -354,6 +372,13 @@ Physically tested. Confirmed on this device:
   not been separately re-confirmed as fully verified since their latest
   commit — see `PROJECT_SPEC.md` section 25 for exactly what is and
   isn't confirmed as of any given commit.
+
+**Not yet tested on any device**: the full-screen pause menu introduced
+in this round (tapping/Back pausing into a menu instead of returning
+directly to the controls, Resume, Restart, Back to Controls, the reduced
+end-of-script menu, and the screen staying awake through the "Tap to
+Start" wait) — verified only by a successful build and inspecting the
+compiled layout/resources so far. See `PROJECT_SPEC.md` section 25.
 
 ### Acer Iconia Tab A500
 

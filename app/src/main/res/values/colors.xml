@@ -9,4 +9,5 @@
     <color name="directory_color">#FF6FC3FF</color>
     <color name="file_color">#FFFFFFFF</color>
     <color name="divider_color">#FF333333</color>
+    <color name="pause_menu_scrim">#CC000000</color>
 </resources>

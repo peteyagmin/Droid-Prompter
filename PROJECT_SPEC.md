@@ -3,11 +3,12 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `66d459f`** (branch
-`claude/android-teleprompter-app-1wfqsr`). The commit that adds this file
-and `CLAUDE.md` is necessarily newer than `66d459f`; that commit's hash is
-reported separately at the end of the task that created these files, not
-inferred here.
+**Documented as of commit `58a8159`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for the pause-menu/
+Start Prompter changes on top of it. The commit that lands this update is
+necessarily newer than `58a8159`; that commit's hash is reported
+separately at the end of the task that made these changes, not inferred
+here.
 
 Throughout this document:
 
@@ -94,8 +95,10 @@ Top file row (`btnOpenFile`, `btnNewScript`, `currentFileLabel`,
 
 Primary action row (`btnStart`, `mirrorToggle`, `btnExit`):
 
-- **Enter Prompter** (`btn_start`) — starts the full-screen sequence
-  (section 17).
+- **Start Prompter** (`btn_start` — renamed from "Enter Prompter"; the
+  ID `btnStart`, its click listener, and the method it calls,
+  `enterFullScreenWaitingFromControls()`, were deliberately left
+  unrenamed) — starts the full-screen sequence (section 17).
 - **Mirror** toggle (`mirrorToggle`, a `ToggleButton`) — "Mirror: On" /
   "Mirror: Off" (`mirror_on` / `mirror_off`).
 - **Exit** (`btn_exit`) — returns to controls, then finishes the
@@ -364,7 +367,7 @@ Confirmed facts:
   pool before the 1:1 split, not added asymmetrically to one side).
 - `ControlButton` was **not** modified by this — `EditorActionButton` is
   its own style (duplicated from, not aliasing, `SecondaryControlButton`)
-  so Enter Prompter and every other `ControlButton`/`SecondaryControlButton`
+  so Start Prompter and every other `ControlButton`/`SecondaryControlButton`
   consumer elsewhere in the app is unaffected by editor-button changes,
   and vice versa.
 - Styles live in `app/src/main/res/values/styles.xml`
@@ -569,7 +572,7 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   (`togglePreviewScrolling()`), reaching the end of the script
   (`performPreviewScrollTick()` when `maxScroll <= 0` or the tick would
   overshoot it), and every control that defensively calls
-  `stopPreviewScrolling()` — Enter Prompter, New Script, Edit Script,
+  `stopPreviewScrolling()` — Start Prompter, New Script, Edit Script,
   Load Script, Exit, Back-out-of-full-screen, and `onPause()`.
 - End-of-preview behavior: scrolls to exactly `maxScroll` then stops;
   does not loop, does not return to the top automatically.
@@ -617,70 +620,115 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   in its entirety — `applyMirror()` is only ever called from
   `MainActivity` and only touches the three views above.
 
-## 17. Enter Prompter workflow
+## 17. Start Prompter workflow
 
-Exact implemented sequence, `enterFullScreenWaitingFromControls()`:
+Button label "Start Prompter" (`btn_start`, renamed from "Enter
+Prompter"); ID `btnStart`, its click listener, and the method it calls,
+`enterFullScreenWaitingFromControls()`, were deliberately left unrenamed
+(the rename was label-only, per explicit instruction not to rename Java
+methods or resource IDs just because a visible label changed).
 
-1. No-op unless `uiState == CONTROLS`.
+Exact implemented sequence:
+
+1. `enterFullScreenWaitingFromControls()`: no-op unless
+   `uiState == CONTROLS`.
 2. If `scriptText`'s text is null/empty, show "Load a script before
    starting." (`no_script_loaded`) and stop. (In practice `btnStart` is
    disabled whenever nothing is loaded, and the placeholder text is
    never itself empty, so this is a defensive check rather than a
    reachable path through the normal UI.)
-3. `scrollHandler.removeCallbacksAndMessages(null)`.
-4. `stopPreviewScrolling()`.
-5. `atScriptEnd = false`.
-6. `uiState = WAITING_FOR_TAP`.
-7. `scriptText.setKeepScreenOn(false)`.
-8. `refreshStateVisibility()` — hides `controlsPanel`.
-9. On the next layout pass: compute and apply the 77.5% opening padding
+3. `stopPreviewScrolling()`.
+4. Delegates to `resetToWaitingFromTop()` (shared with Restart, see
+   below): cancels pending callbacks, `atScriptEnd = false`,
+   `uiState = WAITING_FOR_TAP`, `refreshStateVisibility()` (hides
+   `controlsPanel`, keeps the screen awake — section 19).
+5. On the next layout pass: compute and apply the 77.5% opening padding
    (`OPENING_SPACE_FRACTION`, floored at `SCRIPT_PADDING_DP`), then on a
    second, nested layout pass, `scrollView.scrollTo(0, 0)`.
-10. Shows "Tap to Start" (`tapInstructionText`, via
-    `refreshStateVisibility()`'s `WAITING_FOR_TAP && !atScriptEnd` rule).
-11. Waits for a tap (`handleScriptTap()` in `WAITING_FOR_TAP`) →
-    `startCountdown()`.
-12. Countdown: `COUNTDOWN_START_VALUE = 5`, 1000ms per tick
-    (`performCountdownTick()`), `countdownText` visible via
-    `refreshStateVisibility()`.
-13. `beginActiveScrolling()` — `uiState = SCROLLING`,
-    `scriptText.setKeepScreenOn(true)`, first scroll tick posted after
-    `SCROLL_INTERVAL_MS`.
+6. Shows "Tap to Start" (`tapInstructionText`, via
+   `refreshStateVisibility()`'s `WAITING_FOR_TAP && !atScriptEnd` rule).
+7. Waits for a tap (`handleScriptTap()` in `WAITING_FOR_TAP`) →
+   `startCountdown(CountdownOrigin.INITIAL_START)`.
+8. Countdown: `COUNTDOWN_START_VALUE = 5`, 1000ms per tick
+   (`performCountdownTick()`), `countdownText` visible via
+   `refreshStateVisibility()`.
+9. `beginActiveScrolling()` — `uiState = SCROLLING`, first scroll tick
+   posted after `SCROLL_INTERVAL_MS`.
 
 This deliberately bypasses `switchTopPaddingPreservingPosition()`'s
 delta-preserving logic and always jumps straight to `scrollTo(0, 0)` —
-Enter Prompter always restarts from the top regardless of any prior
+Start Prompter always restarts from the top regardless of any prior
 preview or paused position.
+
+**Restart** (the pause menu's Restart button, section 19) runs the
+identical `resetToWaitingFromTop()` reset (steps 4–9 above, unchanged),
+the only difference being it's reachable from `PAUSED_FULLSCREEN`
+instead of `CONTROLS` and the app was already in full-screen mode
+throughout, so there is no `controlsPanel` to hide and no
+`stopPreviewScrolling()` call (Preview cannot be active from a
+full-screen state — section 19).
 
 ## 18. UiState and state transitions
 
-`private enum UiState { CONTROLS, WAITING_FOR_TAP, COUNTING_DOWN,
-SCROLLING }` — exactly four values, declared in `MainActivity`.
+```java
+private enum UiState {
+    CONTROLS,
+    WAITING_FOR_TAP,
+    COUNTING_DOWN,
+    SCROLLING,
+    PAUSED_FULLSCREEN
+}
+```
+— five values, declared in `MainActivity`. A second enum,
+`CountdownOrigin { INITIAL_START, RESUME }`, records which of two
+different places a countdown was started from (`startCountdown(origin)`
+takes it as a parameter and stores it in a `countdownOrigin` field), so
+canceling it can return to the correct stationary state.
 
 Transitions (all routed through `handleScriptTap()` for tap-driven ones):
 
-- `CONTROLS` → `WAITING_FOR_TAP`: Enter Prompter
-  (`enterFullScreenWaitingFromControls()`).
-- `WAITING_FOR_TAP` → `COUNTING_DOWN`: tap, only if `!atScriptEnd`
-  (`startCountdown()`).
-- `WAITING_FOR_TAP` → `CONTROLS`: tap, only if `atScriptEnd`
-  (`exitFullScreenToControls()`).
+- `CONTROLS` → `WAITING_FOR_TAP`: Start Prompter
+  (`enterFullScreenWaitingFromControls()` → `resetToWaitingFromTop()`).
+- `WAITING_FOR_TAP` → `COUNTING_DOWN`: tap
+  (`startCountdown(CountdownOrigin.INITIAL_START)`). `atScriptEnd` is
+  always `false` here — reaching the end no longer leaves the app in
+  `WAITING_FOR_TAP` (see `SCROLLING` → `PAUSED_FULLSCREEN` below), so
+  this transition no longer branches on it.
 - `COUNTING_DOWN` → `SCROLLING`: countdown reaching 0
   (`beginActiveScrolling()`), not tap-driven.
-- `COUNTING_DOWN` → `WAITING_FOR_TAP`: tap
-  (`cancelCountdownToWaiting()`).
-- `SCROLLING` → `CONTROLS`: tap (`exitFullScreenToControls()`).
-- `SCROLLING` → `WAITING_FOR_TAP` (with `atScriptEnd = true`): reaching
-  the end of the script during a scroll tick
-  (`stopScrollingAtEnd()`), not tap-driven.
-- Any state → `CONTROLS`: `onPause()`, Exit button, Android Back when
-  `uiState != CONTROLS`.
+- `COUNTING_DOWN` → `WAITING_FOR_TAP` or `PAUSED_FULLSCREEN`: tap or
+  Android Back (`cancelCountdown()`), branching on `countdownOrigin` —
+  `INITIAL_START` returns to `WAITING_FOR_TAP`, `RESUME` returns to
+  `PAUSED_FULLSCREEN`.
+- `SCROLLING` → `PAUSED_FULLSCREEN`: tap or Android Back
+  (`pauseFullScreenScrolling()`) — stops the scroll callback and shows
+  the pause menu without touching `CONTROLS` or the scroll position.
+  Replaces what used to be `SCROLLING` → `CONTROLS` directly.
+- `SCROLLING` → `PAUSED_FULLSCREEN` (with `atScriptEnd = true`): reaching
+  the end of the script during a scroll tick (`stopScrollingAtEnd()`),
+  not tap-driven. Replaces the old `SCROLLING` → `WAITING_FOR_TAP`
+  end-of-script transition — see section 20.
+- `PAUSED_FULLSCREEN` → `COUNTING_DOWN`: pressing Resume
+  (`startCountdown(CountdownOrigin.RESUME)`); only offered when
+  `!atScriptEnd` (section 19).
+- `PAUSED_FULLSCREEN` → `WAITING_FOR_TAP`: pressing Restart
+  (`restartFromPauseMenu()` → `resetToWaitingFromTop()`, identical to
+  Start Prompter's reset — section 17).
+- `PAUSED_FULLSCREEN` → `CONTROLS`: pressing Back to Controls, or
+  Android Back while `PAUSED_FULLSCREEN` (`exitFullScreenToControls()`
+  — the same method the Exit button and Back from `WAITING_FOR_TAP` use).
+- `WAITING_FOR_TAP` → `CONTROLS`: Android Back
+  (`exitFullScreenToControls()`) — unchanged from before; `WAITING_FOR_TAP`
+  is the one full-screen state whose Back behavior still exits directly
+  rather than pausing/showing a menu.
+- Any state → `CONTROLS`: `onPause()`, Exit button
+  (`exitFullScreenToControls()`).
 
 `previewScrolling` is a completely separate boolean; it is never read or
 written by any of the `UiState` transition methods above, and none of
 its own start/stop methods change `uiState`.
 
-## 19. Full-screen scrolling and tap behavior
+## 19. Full-screen scrolling, tap behavior, and the pause menu
 
 - `Handler`/`Runnable`: `scrollRunnable` (full-screen scroll ticks),
   `countdownRunnable`, and `previewScrollRunnable` all post to the same
@@ -690,27 +738,73 @@ its own start/stop methods change `uiState`.
 - Speed calculation: `computeScrollPixelsPerTick()` (section 15),
   invoked every `SCROLL_INTERVAL_MS` (50ms) via `performScrollTick()`.
 - Start: `beginActiveScrolling()`, after the countdown reaches 0.
-- Pause/tap-to-pause: a tap during `SCROLLING` calls
-  `exitFullScreenToControls()` directly — there is no intermediate
-  "paused, still full-screen" scrolling state; pausing and returning to
-  controls are the same action.
-- Resume: re-entering is only via Enter Prompter again, which always
-  restarts from the top (section 17) — there is no "resume scrolling
-  from where it paused" full-screen resume path. Returning to the
-  controls-screen preview does preserve scroll position (see section 21).
+- **Pause menu layout**: `pauseMenuOverlay` (a `LinearLayout`,
+  `activity_main.xml`) is the last child of `fullScreenContainer`
+  (after `scrollView`, `countdownText`, `tapInstructionText`), so it
+  draws on top of them; `visibility="gone"` by default,
+  `clickable="true"` and `focusable="true"` so that, once visible, it
+  intercepts every touch within `fullScreenContainer` — the script stays
+  visible but non-interactive beneath it, and a tap on the scrim outside
+  the buttons does nothing (no click listener on the overlay itself, it
+  just consumes the touch). Background `@color/pause_menu_scrim`
+  (`#CC000000`, 80% opaque black). Contains three `ControlButton`-styled
+  buttons, centered, in document order `btnResume`, `btnRestart`,
+  `btnBackToControls` — "Resume" / "Restart" / "Back to Controls"
+  (`btn_resume` / `btn_restart` / `btn_back_to_controls`). None of the
+  three, nor the overlay itself, is touched by `applyMirror()` — the
+  pause menu is never mirrored, regardless of the Mirror setting.
+- Pause/tap-to-pause: a tap during `SCROLLING` (or Android Back) calls
+  `pauseFullScreenScrolling()`: cancels the pending scroll callback,
+  sets `uiState = PAUSED_FULLSCREEN`, and calls
+  `refreshStateVisibility()` — which shows `pauseMenuOverlay` and keeps
+  `controlsPanel` hidden. The scroll position is never touched, so it is
+  preserved exactly. `atScriptEnd` is not touched either (stays `false`
+  for a mid-script pause).
+- Resume: pressing **Resume** calls
+  `startCountdown(CountdownOrigin.RESUME)` — the same countdown path as
+  a fresh Start Prompter tap (`COUNTDOWN_START_VALUE = 5`,
+  `performCountdownTick()`), just with `countdownOrigin` recorded as
+  `RESUME`. Neither the countdown nor `beginActiveScrolling()` touches
+  `scrollView`'s position, so scrolling resumes from exactly where it
+  was paused. Resume is hidden (`btnResume` `GONE`) whenever
+  `atScriptEnd` is true — see section 20.
+- Restart: pressing **Restart** calls `restartFromPauseMenu()`, which is
+  a thin guard (`uiState == PAUSED_FULLSCREEN`) around the same
+  `resetToWaitingFromTop()` Start Prompter uses (section 17) — resets to
+  the top, `WAITING_FOR_TAP`, "Tap to Start" shown, no automatic
+  countdown or scrolling.
+- Back to Controls: pressing **Back to Controls** calls
+  `exitFullScreenToControls()` directly — the exact same method the Exit
+  button and `WAITING_FOR_TAP`'s Back behavior use (see below).
 - Return to controls: `exitFullScreenToControls()` — cancels pending
-  callbacks, stops preview scrolling defensively, disables keep-screen-on,
-  sets `uiState = CONTROLS`, refreshes visibility, and applies the
+  callbacks, stops preview scrolling defensively, sets
+  `uiState = CONTROLS`, refreshes visibility (hides `pauseMenuOverlay`
+  along with everything else full-screen), and applies the
   minimal-padding switch with position preservation
   (`switchTopPaddingPreservingPosition`).
 - Lifecycle cleanup: `onPause()` always calls
   `exitFullScreenToControls()` then `savePreferences()`; `onStop()` and
   `onDestroy()` both additionally call
   `scrollHandler.removeCallbacksAndMessages(null)` directly.
-- Keep-screen-awake: `scriptText.setKeepScreenOn(true)` during
-  `COUNTING_DOWN` and `SCROLLING` (and during preview scrolling,
-  section 14), `false` at every other transition into those states'
-  opposite.
+- Keep-screen-awake: centralized in `refreshStateVisibility()` as
+  `scriptText.setKeepScreenOn(uiState != UiState.CONTROLS)` — every
+  full-screen state (`WAITING_FOR_TAP`, `COUNTING_DOWN`, `SCROLLING`,
+  `PAUSED_FULLSCREEN`) now keeps the screen awake, not just
+  `COUNTING_DOWN`/`SCROLLING` as before; only `CONTROLS` clears it. This
+  single line replaced several individual `setKeepScreenOn()` calls that
+  used to be scattered across the transition methods. Preview's own
+  keep-screen-awake handling (`startPreviewScrolling()`/
+  `stopPreviewScrolling()`) is separate and untouched by this, since
+  Preview only ever runs while `uiState` stays `CONTROLS`.
+- Preview/full-screen exclusivity: `startPreviewScrolling()` requires
+  `uiState == CONTROLS`, and every full-screen entry point
+  (`enterFullScreenWaitingFromControls()`) stops Preview first — Restart,
+  Resume, and Back to Controls all operate entirely within the
+  full-screen state cluster and never pass back through `CONTROLS`
+  themselves (except Back to Controls, which stops Preview defensively
+  via `exitFullScreenToControls()` even though it's already known to be
+  inactive) — so Preview can never overlap full-screen scrolling, the
+  pause menu, or a countdown.
 
 ## 20. End-of-script behavior
 
@@ -718,20 +812,28 @@ its own start/stop methods change `uiState`.
   (nothing to scroll) or that the next tick would reach/exceed
   `maxScroll`, snaps to exactly `maxScroll`, and calls
   `stopScrollingAtEnd()`.
+- `stopScrollingAtEnd()` now sets `atScriptEnd = true` and
+  `uiState = PAUSED_FULLSCREEN` (previously `WAITING_FOR_TAP`) — reaching
+  the end shows the same pause-menu overlay a mid-script pause would,
+  rather than a bare full-screen view with no available action beyond a
+  tap-to-exit.
+- Reduced end-of-script menu: because `refreshStateVisibility()` hides
+  `btnResume` whenever `atScriptEnd` is true, the menu shown at the end
+  contains only **Restart** and **Back to Controls** — there is never a
+  Resume button that would do nothing (or immediately re-stop) if
+  pressed.
 - `atScriptEnd` behavior: set `true` by `stopScrollingAtEnd()`; reset to
-  `false` by `enterFullScreenWaitingFromControls()` (every fresh Enter
-  Prompter) and by `loadScriptFile()`/`applyNoScriptState()`.
-- Tap to Start suppression: `refreshStateVisibility()`'s
-  `showTapInstruction = uiState == WAITING_FOR_TAP && !atScriptEnd` — at
-  the end of the script, `WAITING_FOR_TAP` is active but "Tap to Start"
-  is not shown.
-- Tapping at the end: `handleScriptTap()`'s `WAITING_FOR_TAP` case checks
-  `atScriptEnd` — if true, goes straight to
-  `exitFullScreenToControls()` instead of starting a countdown.
-- Re-entering Prompter mode: only via Enter Prompter from the controls
-  screen, which unconditionally resets `atScriptEnd = false` and scrolls
-  to the top (section 17) — there is no "continue from the end" or
-  "loop" behavior.
+  `false` by `resetToWaitingFromTop()` (used by both Start Prompter and
+  Restart) and by `loadScriptFile()`/`applyNoScriptState()`.
+- Tapping at the end: no longer routes through `handleScriptTap()` at
+  all — `pauseMenuOverlay` is visible and clickable, so it intercepts the
+  tap; the user presses Restart or Back to Controls instead. This is the
+  "small adjustment" to the previous tap-at-end behavior that the pause
+  menu required.
+- Re-entering Prompter mode: only via Start Prompter (from `CONTROLS`) or
+  Restart (from the end-state pause menu), both of which unconditionally
+  reset `atScriptEnd = false` and scroll to the top (section 17) — there
+  is still no "continue from the end" or "loop" behavior.
 
 ## 21. Preview versus full-screen padding
 
@@ -739,12 +841,13 @@ its own start/stop methods change `uiState`.
   uniformly on all four sides whenever `uiState == CONTROLS`.
 - Full-screen opening padding: `OPENING_SPACE_FRACTION = 0.775f` of the
   full-screen viewport height, floored at `SCRIPT_PADDING_DP`, computed
-  and applied only inside `enterFullScreenWaitingFromControls()`.
+  and applied only inside `resetToWaitingFromTop()` (shared by Start
+  Prompter and Restart — section 17).
 - Centralized switching: `switchTopPaddingPreservingPosition()` is the
   single method used to change `scriptText`'s top padding while
   preserving apparent scroll position — but it is used **only** by
-  `exitFullScreenToControls()` (returning to controls), never by
-  `enterFullScreenWaitingFromControls()`.
+  `exitFullScreenToControls()` (returning to controls, including via
+  Back to Controls), never by `resetToWaitingFromTop()`.
 - Scroll-position adjustment: if `scrollView.getScrollY() > 0` when the
   padding changes, the new scroll position is `previousScrollY +
   (newTopPaddingPx - oldTopPaddingPx)`, clamped to
@@ -752,41 +855,56 @@ its own start/stop methods change `uiState`.
   change has been laid out (`scrollView.post(...)`). If already at
   scroll position 0, no adjustment is made — the new padding alone
   produces the correct look.
-- Intentional reset when Enter Prompter is pressed:
-  `enterFullScreenWaitingFromControls()` always forces
-  `scrollTo(0, 0)` regardless of where the preview or a previous
-  full-screen session left off (section 17) — this is a deliberate
-  bypass of position preservation, not an oversight.
-- Preservation when returning to preview after pausing: a tap during
-  `SCROLLING` (or `WAITING_FOR_TAP`/`COUNTING_DOWN`) that calls
-  `exitFullScreenToControls()` **does** go through
-  `switchTopPaddingPreservingPosition()`, so the controls-screen preview
-  lands on approximately the same passage of text that was on screen in
-  full-screen mode.
+- Intentional reset when Start Prompter or Restart is pressed:
+  `resetToWaitingFromTop()` always forces `scrollTo(0, 0)` regardless of
+  where the preview or a previous full-screen session left off (section
+  17) — this is a deliberate bypass of position preservation, not an
+  oversight.
+- Preservation when returning to controls after pausing: Back to
+  Controls / Android Back from `PAUSED_FULLSCREEN`, and Back from
+  `WAITING_FOR_TAP`, all go through `exitFullScreenToControls()`, which
+  **does** go through `switchTopPaddingPreservingPosition()`, so the
+  controls-screen preview lands on approximately the same passage of
+  text that was paused (or the top of the script, for `WAITING_FOR_TAP`)
+  in full-screen mode.
 
 ## 22. Exit and Android Back behavior
 
 - Exit (`btnExit`): `exitFullScreenToControls()` then `finish()` —
   always leaves the app from a clean controls-screen state first.
-- Back in full-screen states (`uiState != CONTROLS`):
-  `exitFullScreenToControls()` only — returns to controls, does **not**
-  finish the Activity.
-- Back in control state (`uiState == CONTROLS`): `finish()` — closes the
-  app.
+  Unchanged.
+- Android Back, by `uiState` (`onBackPressed()`, a `switch` over
+  `uiState`):
+  - `SCROLLING` → `pauseFullScreenScrolling()`: pauses into
+    `PAUSED_FULLSCREEN` and shows the pause menu, mirroring a
+    script-area tap. Does **not** immediately return to `CONTROLS`.
+  - `PAUSED_FULLSCREEN` → `exitFullScreenToControls()`: identical to
+    pressing Back to Controls.
+  - `COUNTING_DOWN` → `cancelCountdown()`: cancels the countdown and
+    returns to `WAITING_FOR_TAP` (with "Tap to Start" shown) or
+    `PAUSED_FULLSCREEN` (with the pause menu shown, paused position
+    preserved), depending on `countdownOrigin`.
+  - `WAITING_FOR_TAP` → `exitFullScreenToControls()`: exits full-screen
+    mode directly to `CONTROLS` — the one full-screen state that still
+    behaves this way rather than pausing/showing a menu, unchanged from
+    before the pause menu existed.
+  - `CONTROLS` → `finish()`: closes the app. Unchanged.
 - Editor Back (`ScriptEditorActivity.onBackPressed()`):
   `handleCancelOrBack()` — dirty-check + Discard Changes dialog, same as
-  the Cancel button (section 12).
+  the Cancel button (section 12). Unaffected by any of the above.
 - File browser Back: navigates up one directory if not already at the
   browser's start location or a detected storage root; otherwise
-  `setResult(RESULT_CANCELED)` and closes.
-- Callback cleanup: every path back to `CONTROLS` or out of the app goes
-  through `exitFullScreenToControls()` (or the lifecycle methods'
-  explicit `scrollHandler.removeCallbacksAndMessages(null)`), so no
+  `setResult(RESULT_CANCELED)` and closes. Unaffected.
+- Callback cleanup: every path back to `CONTROLS`, into
+  `PAUSED_FULLSCREEN`, or out of the app cancels pending callbacks first
+  (`exitFullScreenToControls()`, `pauseFullScreenScrolling()`,
+  `cancelCountdown()`, and the lifecycle methods' explicit
+  `scrollHandler.removeCallbacksAndMessages(null)`), so no
   scroll/countdown/preview callback can keep firing after leaving the
-  relevant screen.
+  relevant state.
 - Preference preservation: `onPause()` calls `savePreferences()`
-  unconditionally; nothing in the Back/Exit paths clears any saved
-  preference.
+  unconditionally; nothing in the Back/Exit/pause-menu paths clears any
+  saved preference.
 
 ## 23. SharedPreferences and persisted state
 
@@ -884,6 +1002,22 @@ separately re-tested on the Lenovo since being implemented. Treat them as
 implemented-and-compiled — including compiled-APK-verified for the
 button geometry and hint text specifically — not as hardware-reverified.
 
+**Also not yet confirmed on hardware**: the entire full-screen pause-menu
+feature (sections 17–22) — `PAUSED_FULLSCREEN`, tap/Back pausing instead
+of exiting, Resume's countdown-then-continue, Restart, Back to Controls,
+the reduced end-of-script menu, the "Start Prompter" rename, and the
+screen staying awake through `WAITING_FOR_TAP`/`PAUSED_FULLSCREEN` — is
+new in this round and has not been run on any physical device yet.
+Verified so far only by successful compilation, v1/v2 signature and
+zipalign checks, and inspecting the compiled layout/string resources
+(button order and IDs inside `pauseMenuOverlay`, the "Start Prompter" /
+"Resume" / "Restart" / "Back to Controls" string values). In particular,
+untested: whether the touch-interception on `pauseMenuOverlay` actually
+blocks the script `ScrollView` beneath it from receiving taps or manual
+scroll gestures on real hardware, and whether the three pause-menu
+buttons and their spacing look correct (no overlap/clipping) at the
+device's actual resolution.
+
 ### Acer Iconia Tab A500
 
 No physical testing on an actual Acer Iconia Tab A500 has occurred
@@ -971,22 +1105,17 @@ release to point to):
 
 ## Discrepancies found while documenting
 
-- `README.md`'s "Only permission requested: `READ_EXTERNAL_STORAGE`"
-  (Compatibility notes section) is out of date: the current manifest
-  also declares `WRITE_EXTERNAL_STORAGE`, required by the New
-  Script/Edit Script save functionality added after that README section
-  was last written. `README.md` was not modified as part of this
-  documentation task (out of scope — source-code/resource changes were
-  explicitly excluded), but a future task should update it.
-- `README.md`'s Features list ("Start / Pause / Return to Beginning
-  controls") describes an earlier control scheme than what current
-  source implements (`btn_start` = "Enter Prompter", no separate
-  Pause/Return-to-Beginning controls; tapping the script area serves the
-  pause/resume/return role instead, per sections 17–20 above). Same
-  out-of-scope note as above.
-- No other discrepancies between the current source and this
-  documentation were found; every behavior described above was
-  confirmed directly against `app/src/main/java/...`,
+Historical note: an earlier pass of this document found `README.md` out
+of date in two ways — it claimed `READ_EXTERNAL_STORAGE` was the only
+permission (missing `WRITE_EXTERNAL_STORAGE`), and its Features list
+still described a "Start / Pause / Return to Beginning" control scheme
+predating "Enter Prompter" (itself since renamed to "Start Prompter" in
+this round). Both were fixed in a subsequent `README.md`-focused task and
+again kept current with this round's pause-menu changes.
+
+No outstanding discrepancies between the current source and this
+documentation are known as of this round; every behavior described above
+was confirmed directly against `app/src/main/java/...`,
   `app/src/main/res/...`, `AndroidManifest.xml`, `app/build.gradle`, and
   `build.sh` as checked out at commit `66d459f`, and, where noted, by
   inspecting the compiled APK's resolved attributes rather than the XML

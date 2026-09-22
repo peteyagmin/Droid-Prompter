@@ -66,7 +66,7 @@
                 android:text="@string/btn_edit_script" />
         </LinearLayout>
 
-        <!-- Primary action row: Enter Prompter (dominant) + Mirror + Exit -->
+        <!-- Primary action row: Start Prompter (dominant) + Mirror + Exit -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -285,6 +285,51 @@
             android:textStyle="bold"
             android:text="@string/tap_to_start"
             android:textSize="@dimen/tap_instruction_text_size" />
+
+        <!-- Last child so it draws on top of scrollView/countdownText/
+             tapInstructionText and, being clickable, intercepts every touch
+             within fullScreenContainer while visible: the script stays
+             visible but non-interactive beneath the scrim. -->
+        <LinearLayout
+            android:id="@+id/pauseMenuOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@color/pause_menu_scrim"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true">
+
+            <Button
+                android:id="@+id/btnResume"
+                style="@style/ControlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="160dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/btn_resume" />
+
+            <Button
+                android:id="@+id/btnRestart"
+                style="@style/ControlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="160dp"
+                android:layout_marginRight="16dp"
+                android:layout_marginEnd="16dp"
+                android:text="@string/btn_restart" />
+
+            <Button
+                android:id="@+id/btnBackToControls"
+                style="@style/ControlButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="160dp"
+                android:text="@string/btn_back_to_controls" />
+
+        </LinearLayout>
 
     </FrameLayout>
 

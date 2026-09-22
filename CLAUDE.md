@@ -64,14 +64,27 @@ report the discrepancy before proceeding.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.
-- Enter Prompter always starts from the beginning of the loaded script
-  (`scrollTo(0, 0)`, `atScriptEnd = false`), regardless of any prior
-  preview or paused position.
+- Start Prompter (and Restart) always starts from the beginning of the
+  loaded script (`scrollTo(0, 0)`, `atScriptEnd = false`), regardless of
+  any prior preview or paused position.
 - Control-screen preview uses minimal, uniform top padding
   (`SCRIPT_PADDING_DP`).
 - Full-screen Prompter mode uses the existing 77.5% opening buffer
   (`OPENING_SPACE_FRACTION`), applied only on entry, never preserved by
   `switchTopPaddingPreservingPosition()`.
+- Tapping the script (or Android Back) during `SCROLLING` pauses into
+  `PAUSED_FULLSCREEN` and shows the full-screen pause menu (Resume /
+  Restart / Back to Controls) — it does not return to the controls
+  screen directly. Only `WAITING_FOR_TAP`'s Back behavior still exits
+  full-screen mode directly; every other full-screen state's Back
+  behavior goes through the pause-menu-aware paths in `onBackPressed()`.
+- Resume must run the same five-second countdown as a fresh Start
+  Prompter tap, then continue scrolling from the exact paused position
+  (not the top) — `beginActiveScrolling()`/`performScrollTick()` must
+  never be changed to reset scroll position on their own.
+- Reaching the end of the script now also lands in `PAUSED_FULLSCREEN`
+  (not `WAITING_FOR_TAP`), with Resume hidden — never add a Resume button
+  that would do nothing at end-of-script.
 
 ## Current UI facts that must not be inferred incorrectly
 
@@ -82,6 +95,13 @@ report the discrepancy before proceeding.
 - Do not document or implement a Speed minus/plus control unless
   explicitly requested in a future task.
 - "Return to Top" does not exist in the current source.
+- The main screen's primary button (`btnStart`) is now labeled "Start
+  Prompter" (`btn_start`), not "Enter Prompter" — a label-only rename;
+  its ID, click listener, and the method it calls
+  (`enterFullScreenWaitingFromControls()`) were kept as-is.
+- `MainActivity`'s `UiState` enum has five values, including
+  `PAUSED_FULLSCREEN` (the full-screen pause menu). See
+  `PROJECT_SPEC.md` sections 17–22.
 - New Script and Edit Script are implemented (`ScriptEditorActivity`,
   `EDITOR_MODE_CREATE_NEW` / `EDITOR_MODE_EDIT_EXISTING`).
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on

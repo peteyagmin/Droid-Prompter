@@ -15,7 +15,7 @@
     </style>
 
     <!-- Visually secondary controls: Mirror, Exit, Preview/Stop. Smaller
-         than ControlButton so Enter Prompter reads as the primary action. -->
+         than ControlButton so Start Prompter reads as the primary action. -->
     <style name="SecondaryControlButton">
         <item name="android:minHeight">@dimen/secondary_button_height</item>
         <item name="android:textSize">@dimen/secondary_text_size</item>
