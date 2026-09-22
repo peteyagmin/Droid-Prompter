@@ -374,9 +374,8 @@ installation path.
 
 ### Lenovo Smart Tab M8
 
-Physically tested (exact Android version not confirmed, so not stated
-here). Confirmed on this device:
-
+Physically tested. Runs Android 10 (API level 29).
+Confirmed on this device:
 - Normal sideloading works; a one-time "designed for an older Android
   version" warning appears on first launch, and the app launches and
   functions normally once it's dismissed.
@@ -388,7 +387,7 @@ here). Confirmed on this device:
 - The end-of-script behavior (final text staying unobstructed until a
   tap, then the reduced Restart/Back to Controls menu) is physically
   tested and functional.
-
+  
 - The lowered end-of-script resting position and full-screen
   status/navigation bar hiding are also physically tested and confirmed
   working on this device.
