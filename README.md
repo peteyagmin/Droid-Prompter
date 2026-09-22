@@ -100,13 +100,16 @@ difference is the most likely place to look.
 13. There is no separate Return to Top or Return to Beginning button —
     Restart (from the pause menu) or Start Prompter again (from the
     controls) serve that role.
-14. Reaching the very end of the script stops scrolling but leaves the
-    final text fully visible and unobstructed — no menu, no overlay —
-    and keeps the screen awake, so there's no rush to finish reading it.
-    A tap then reveals the end-of-script menu, with only **Restart** and
-    **Back to Controls** offered (no Resume — there's nothing left to
-    scroll to). Android Back at this point skips the menu and goes
-    straight to the control screen.
+14. Automatic scrolling continues past the last line until it reaches a
+    comfortable, centered reading position — approximately the vertical
+    middle of the screen — rather than stopping with the final line
+    crammed against the bottom edge. Once there, scrolling stops and the
+    final text stays fully visible and unobstructed — no menu, no
+    overlay — and the screen stays awake, so there's no rush to finish
+    reading it. A tap then reveals the end-of-script menu, with only
+    **Restart** and **Back to Controls** offered (no Resume — there's
+    nothing left to scroll to). Android Back at this point skips the
+    menu and goes straight to the control screen.
 15. Preview scrolling (control screen) and full-screen Prompter
     scrolling are always independent — starting or stopping one never
     starts, stops, or otherwise affects the other, even though both use
@@ -375,12 +378,14 @@ here). Confirmed on this device:
 - The compact Script Editor layout and keyboard behavior.
 - The full-screen pause menu, and Resume, Restart, and Back to Controls,
   are all physically tested and functional.
+- The end-of-script behavior (final text staying unobstructed until a
+  tap, then the reduced Restart/Back to Controls menu) is physically
+  tested and functional.
 
-**Awaiting physical verification**: this round's correction — the final
-script text staying fully visible and unobstructed (no menu or overlay)
-until a tap, with the reduced Restart/Back to Controls menu appearing
-only then, and Android Back at that point going straight to the control
-screen — has not yet been installed and tested on this device.
+**Awaiting physical verification**: this round's refinement — automatic
+scrolling continuing past the last line to a centered reading position,
+instead of stopping with it near the bottom edge — has not yet been
+installed and tested on this device.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -390,13 +395,14 @@ show the "designed for an older Android version" warning the Lenovo
 does (see the note at the end of this section). Confirmed functional on
 this device: the main
 controls, the built-in file browser, script loading, New Script, Edit
-Script, Preview scrolling, full-screen Prompter mode, the pause menu, and
-Resume/Restart/Back to Controls. Its smaller screen than the Lenovo's
-makes it a useful additional compact-layout check.
+Script, Preview scrolling, full-screen Prompter mode, the pause menu,
+Resume/Restart/Back to Controls, and the end-of-script behavior. Its
+smaller screen than the Lenovo's makes it a useful additional
+compact-layout check.
 
-**Awaiting physical verification**: the same end-of-script correction
-described above for the Lenovo has not yet been tested on this device
-either.
+**Awaiting physical verification**: the same centered-scrolling
+refinement described above for the Lenovo has not yet been tested on
+this device either.
 
 ### Acer Iconia Tab A500
 

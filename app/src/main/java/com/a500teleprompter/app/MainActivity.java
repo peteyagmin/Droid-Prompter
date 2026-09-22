@@ -69,6 +69,7 @@ public class MainActivity extends Activity {
     private static final long COUNTDOWN_INTERVAL_MS = 1000;
 
     private static final float OPENING_SPACE_FRACTION = 0.775f;
+    private static final float END_SPACE_FRACTION = 0.5f;
     private static final float SCRIPT_PADDING_DP = 24f;
 
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
@@ -467,7 +468,7 @@ public class MainActivity extends Activity {
         loadedFilePath = null;
         atScriptEnd = false;
         int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        scriptText.setPadding(sidePaddingPx, sidePaddingPx, sidePaddingPx, sidePaddingPx);
+        applyScriptPadding(sidePaddingPx, sidePaddingPx);
         scriptText.setText(R.string.default_script_placeholder);
         updateLoadedFileLabel();
         scrollView.scrollTo(0, 0);
@@ -535,35 +536,58 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * The single place scriptText's padding is ever set. Left/right always
+     * use SCRIPT_PADDING_DP; top and bottom are passed in explicitly so
+     * every caller states exactly what it wants for both, rather than
+     * leaving one of them implicit (as the old uniform-padding code used
+     * to for bottom). Called only from the padding-transition methods
+     * below, never scattered elsewhere.
+     */
+    private void applyScriptPadding(int topPaddingPx, int bottomPaddingPx) {
+        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        scriptText.setPadding(sidePaddingPx, topPaddingPx, sidePaddingPx, bottomPaddingPx);
+    }
+
+    /**
      * Centralized script-padding switch used whenever uiState crosses the
-     * CONTROLS / full-screen boundary. scriptText's XML default (uniform
-     * 24dp padding) is exactly right for CONTROLS, so this is only ever
-     * called from the two transition methods, never from onCreate().
+     * CONTROLS / full-screen boundary in the direction that should keep the
+     * same passage on screen (exitFullScreenToControls()). scriptText's XML
+     * default (uniform 24dp padding) is exactly right for CONTROLS, so this
+     * is only ever called returning to CONTROLS, never from onCreate() or
+     * when entering full screen (resetToWaitingFromTop() always resets to
+     * the top instead, so it applies padding directly).
+     *
+     * Only the top-padding delta shifts the preserved scroll position:
+     * scrollY is measured from the top of the content, so a bottom-padding
+     * change alone never moves any earlier content on screen. The new
+     * bottom padding is still applied together with the new top padding in
+     * the same call, so the post-layout clamp below uses the correct
+     * (already-updated) maximum scroll range.
      *
      * If the script is already at its very start (scrollY == 0), the new
      * padding is applied and scrollY is left at 0: that alone produces the
      * correct per-mode look (first line near the top in CONTROLS, first
      * line ~77.5% down in full screen) with no scroll adjustment needed.
-     * Otherwise scrollY is shifted by the padding delta, then clamped once
-     * the padding change has actually been laid out, so the same
+     * Otherwise scrollY is shifted by the top-padding delta, then clamped
+     * once the padding change has actually been laid out, so the same
      * approximate passage of text stays on screen instead of jumping to a
      * different part of the script.
      */
-    private void switchTopPaddingPreservingPosition(final int newTopPaddingPx, final Runnable afterSettled) {
+    private void switchScriptPaddingPreservingPosition(final int newTopPaddingPx,
+            final int newBottomPaddingPx, final Runnable afterSettled) {
         final int oldTopPaddingPx = scriptText.getPaddingTop();
-        final int delta = newTopPaddingPx - oldTopPaddingPx;
-        final int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        final int topDelta = newTopPaddingPx - oldTopPaddingPx;
         final int previousScrollY = scrollView.getScrollY();
         final boolean atStart = previousScrollY <= 0;
 
-        scriptText.setPadding(sidePaddingPx, newTopPaddingPx, sidePaddingPx, sidePaddingPx);
+        applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
 
         scrollView.post(new Runnable() {
             @Override
             public void run() {
                 if (!atStart) {
                     int maxScroll = Math.max(0, scriptText.getHeight() - scrollView.getHeight());
-                    int proposed = previousScrollY + delta;
+                    int proposed = previousScrollY + topDelta;
                     int clamped = Math.min(Math.max(proposed, 0), maxScroll);
                     scrollView.scrollTo(scrollView.getScrollX(), clamped);
                 }
@@ -662,25 +686,32 @@ public class MainActivity extends Activity {
     /**
      * Shared by enterFullScreenWaitingFromControls() and
      * restartFromPauseMenu(): resets to WAITING_FOR_TAP at the very top of
-     * the script with the full-screen opening buffer applied, ready for a
-     * fresh tap-to-start. This deliberately bypasses
-     * switchTopPaddingPreservingPosition()'s delta-preserving logic
-     * (reserved for exitFullScreenToControls(), where pausing mid-script
-     * and returning to the preview should keep the same passage on
-     * screen) and jumps straight to scrollY 0 instead.
+     * the script with both the full-screen opening buffer (top) and
+     * trailing end space (bottom) applied, ready for a fresh tap-to-start.
+     * This deliberately bypasses switchScriptPaddingPreservingPosition()'s
+     * delta-preserving logic (reserved for exitFullScreenToControls(),
+     * where pausing mid-script and returning to the preview should keep
+     * the same passage on screen) and jumps straight to scrollY 0 instead.
+     *
+     * Both paddings are fractions of the same measured full-screen
+     * viewport height (OPENING_SPACE_FRACTION, END_SPACE_FRACTION), so
+     * neither depends on font size or script length -- recomputing them
+     * fresh here on every full-screen entry is enough to keep the opening
+     * position and the eventual end-of-script centering correct at any
+     * font size, on any screen, for any script.
      */
     private void resetToWaitingFromTop() {
         scrollHandler.removeCallbacksAndMessages(null);
         atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
         refreshStateVisibility();
-        // The dynamic opening-buffer padding depends on the full-screen
-        // viewport height, which is only accurate after controlsPanel's
-        // visibility change (just requested above) has actually been laid
-        // out -- hence the post()-after-layout pattern used elsewhere in
-        // this class. A second, nested post() waits for that padding
-        // change to be laid out in turn before scrolling to 0, though
-        // scrollTo(0, 0) itself needs no measurement to be valid.
+        // The dynamic paddings depend on the full-screen viewport height,
+        // which is only accurate after controlsPanel's visibility change
+        // (just requested above) has actually been laid out -- hence the
+        // post()-after-layout pattern used elsewhere in this class. A
+        // second, nested post() waits for that padding change to be laid
+        // out in turn before scrolling to 0, though scrollTo(0, 0) itself
+        // needs no measurement to be valid.
         scrollView.post(new Runnable() {
             @Override
             public void run() {
@@ -688,7 +719,9 @@ public class MainActivity extends Activity {
                 int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
                 int newTopPaddingPx = Math.max(sidePaddingPx,
                         Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
-                scriptText.setPadding(sidePaddingPx, newTopPaddingPx, sidePaddingPx, sidePaddingPx);
+                int newBottomPaddingPx = Math.max(sidePaddingPx,
+                        Math.round(fullScreenHeightPx * END_SPACE_FRACTION));
+                applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
                 scrollView.post(new Runnable() {
                     @Override
                     public void run() {
@@ -766,7 +799,8 @@ public class MainActivity extends Activity {
         stopPreviewScrolling();
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
-        switchTopPaddingPreservingPosition(dpToPx(SCRIPT_PADDING_DP), null);
+        int minimalPaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        switchScriptPaddingPreservingPosition(minimalPaddingPx, minimalPaddingPx, null);
     }
 
     /**

@@ -72,7 +72,7 @@ report the discrepancy before proceeding.
   (`SCRIPT_PADDING_DP`).
 - Full-screen Prompter mode uses the existing 77.5% opening buffer
   (`OPENING_SPACE_FRACTION`), applied only on entry, never preserved by
-  `switchTopPaddingPreservingPosition()`.
+  `switchScriptPaddingPreservingPosition()`.
 - Tapping the script (or Android Back) during `SCROLLING` pauses into
   `PAUSED_FULLSCREEN` and shows the full-screen pause menu (Resume /
   Restart / Back to Controls) — it does not return to the controls
@@ -86,6 +86,9 @@ report the discrepancy before proceeding.
 - Reaching the end of a script must leave the final text unobstructed
   until the user taps. Only then should Restart and Back to Controls
   appear. Resume must not appear at the end.
+- Full-screen scrolling must continue until the final script line
+  reaches approximately the vertical center of the display. Only then
+  may the app enter `END_OF_SCRIPT_WAITING`.
 
 ## Current UI facts that must not be inferred incorrectly
 

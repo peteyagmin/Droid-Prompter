@@ -3,11 +3,11 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `8a7115d`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for the
-END_OF_SCRIPT_WAITING correction and the latest hardware-testing results
-on top of it. The commit that lands this update is necessarily newer
-than `8a7115d`; that commit's hash is reported separately at the end of
+**Documented as of commit `d37883d`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for the end-of-script
+vertical-centering refinement (the dynamic trailing end space, section
+21) on top of it. The commit that lands this update is necessarily newer
+than `d37883d`; that commit's hash is reported separately at the end of
 the task that made these changes, not inferred here.
 
 Throughout this document:
@@ -658,7 +658,7 @@ Exact implemented sequence:
 9. `beginActiveScrolling()` — `uiState = SCROLLING`, first scroll tick
    posted after `SCROLL_INTERVAL_MS`.
 
-This deliberately bypasses `switchTopPaddingPreservingPosition()`'s
+This deliberately bypasses `switchScriptPaddingPreservingPosition()`'s
 delta-preserving logic and always jumps straight to `scrollTo(0, 0)` —
 Start Prompter always restarts from the top regardless of any prior
 preview or paused position.
@@ -809,7 +809,7 @@ its own start/stop methods change `uiState`.
   `uiState = CONTROLS`, refreshes visibility (hides `pauseMenuOverlay`
   along with everything else full-screen), and applies the
   minimal-padding switch with position preservation
-  (`switchTopPaddingPreservingPosition`).
+  (`switchScriptPaddingPreservingPosition`).
 - Lifecycle cleanup: `onPause()` always calls
   `exitFullScreenToControls()` then `savePreferences()`; `onStop()` and
   `onDestroy()` both additionally call
@@ -845,7 +845,16 @@ rather than reusing `PAUSED_FULLSCREEN` for both:
 - Stopping at the end: `performScrollTick()` detects `maxScroll <= 0`
   (nothing to scroll) or that the next tick would reach/exceed
   `maxScroll`, snaps to exactly `maxScroll`, and calls
-  `stopScrollingAtEnd()`.
+  `stopScrollingAtEnd()`. `performScrollTick()`'s own code is completely
+  unchanged by the end-of-script centering work in section 21 below —
+  `maxScroll = scriptText.getHeight() - scrollView.getHeight()` already
+  measures the true bottom of all of `scriptText`'s content, including
+  whatever bottom padding is currently applied, so growing that padding
+  (to hold the trailing end space) is enough on its own to make
+  `maxScroll` land later, with no changes to the detection logic itself.
+  `END_OF_SCRIPT_WAITING` still begins only once `scrollView` actually
+  reaches that true final scroll position — never merely because the
+  last line first becomes visible.
 - `stopScrollingAtEnd()` cancels the pending scroll callback, sets
   `atScriptEnd = true` and `uiState = END_OF_SCRIPT_WAITING`, and calls
   `refreshStateVisibility()`. It does **not** touch `scrollView`'s
@@ -914,38 +923,121 @@ pausing into a menu.
   (section 17) — there is still no "continue from the end" or "loop"
   behavior.
 
-## 21. Preview versus full-screen padding
+## 21. Preview versus full-screen padding, and the end-of-script trailing space
 
-- Minimal preview/control top padding: `SCRIPT_PADDING_DP = 24f`, applied
-  uniformly on all four sides whenever `uiState == CONTROLS`.
-- Full-screen opening padding: `OPENING_SPACE_FRACTION = 0.775f` of the
-  full-screen viewport height, floored at `SCRIPT_PADDING_DP`, computed
-  and applied only inside `resetToWaitingFromTop()` (shared by Start
-  Prompter and Restart — section 17).
-- Centralized switching: `switchTopPaddingPreservingPosition()` is the
-  single method used to change `scriptText`'s top padding while
-  preserving apparent scroll position — but it is used **only** by
-  `exitFullScreenToControls()` (returning to controls, including via
-  Back to Controls), never by `resetToWaitingFromTop()`.
-- Scroll-position adjustment: if `scrollView.getScrollY() > 0` when the
-  padding changes, the new scroll position is `previousScrollY +
-  (newTopPaddingPx - oldTopPaddingPx)`, clamped to
-  `[0, contentHeight - viewportHeight]`, applied after the padding
-  change has been laid out (`scrollView.post(...)`). If already at
-  scroll position 0, no adjustment is made — the new padding alone
-  produces the correct look.
-- Intentional reset when Start Prompter or Restart is pressed:
-  `resetToWaitingFromTop()` always forces `scrollTo(0, 0)` regardless of
-  where the preview or a previous full-screen session left off (section
-  17) — this is a deliberate bypass of position preservation, not an
-  oversight.
-- Preservation when returning to controls after pausing: Back to
-  Controls / Android Back from `PAUSED_FULLSCREEN`, and Back from
-  `WAITING_FOR_TAP`, all go through `exitFullScreenToControls()`, which
-  **does** go through `switchTopPaddingPreservingPosition()`, so the
-  controls-screen preview lands on approximately the same passage of
-  text that was paused (or the top of the script, for `WAITING_FOR_TAP`)
-  in full-screen mode.
+`scriptText`'s padding is the entire mechanism behind both the opening
+buffer and the end-of-script centering; there is no separate "trailing
+space view" or scroll-range override anywhere. Two helper methods
+centralize every change to it:
+
+- `applyScriptPadding(topPaddingPx, bottomPaddingPx)` — the **only**
+  place `scriptText.setPadding(...)` is ever called. Left/right always
+  use `SCRIPT_PADDING_DP`; top and bottom are passed in explicitly by
+  every caller, so neither is ever left implicit.
+- `switchScriptPaddingPreservingPosition(newTopPaddingPx,
+  newBottomPaddingPx, afterSettled)` — changes both paddings via
+  `applyScriptPadding()` while preserving the apparent scroll position,
+  used **only** by `exitFullScreenToControls()` (returning to controls,
+  including via Back to Controls). Only the top-padding delta shifts the
+  preserved position — `scrollY` is measured from the top of the
+  content, so a bottom-padding change alone never moves any earlier
+  content on screen — but the new bottom padding is applied in the same
+  call, so the post-layout clamp below already sees the correct, updated
+  maximum scroll range.
+
+**Minimal control-screen padding** (`uiState == CONTROLS`): both top and
+bottom set to `SCRIPT_PADDING_DP = 24f` via `applyScriptPadding()` —
+unchanged from before this round, just now stated as an explicit bottom
+value instead of an implicit side-padding coincidence. This is also
+exactly what Preview/Stop scrolls within: Preview only ever runs while
+`uiState == CONTROLS` (section 19), so `performPreviewScrollTick()`'s own
+`maxScroll` calculation automatically reflects this minimal padding,
+never the large full-screen trailing space below — no code change was
+needed in either Preview method to keep this true.
+
+**Full-screen opening padding (top)**: `OPENING_SPACE_FRACTION = 0.775f`
+of the measured full-screen viewport height (`scrollView.getHeight()`),
+floored at `SCRIPT_PADDING_DP`. Unchanged from before this round.
+
+**Full-screen trailing end space (bottom)**: `END_SPACE_FRACTION = 0.5f`
+of the same measured full-screen viewport height, floored at
+`SCRIPT_PADDING_DP`. Both fractions are computed together, from the same
+viewport-height measurement, inside `resetToWaitingFromTop()` (shared by
+Start Prompter and Restart — section 17) and applied via
+`applyScriptPadding()`. Because scrollable content height includes a
+View's own padding, this bottom padding *is* the trailing space — no
+blank lines or extra characters are ever added to `scriptText`'s actual
+string content, and nothing about the loaded/saved script file changes.
+
+*Why `0.5f` centers the final line*: at true max scroll, the bottom edge
+of `scrollView`'s content is flush with the bottom edge of the viewport
+(`scrollY = maxScroll = contentHeight - viewportHeight`). The text's own
+bottom edge (end of the last line, before the trailing padding) sits at
+content-relative height `topPadding + textHeight`. Its on-screen
+position at that scroll position works out to `viewportHeight -
+bottomPadding`, independent of `topPadding` and `textHeight` entirely.
+Setting `bottomPadding = viewportHeight * 0.5` therefore leaves the last
+line's bottom edge at `viewportHeight * 0.5` — the vertical midpoint —
+regardless of font size, script length, or device resolution, which is
+exactly why this fraction was chosen and why it needs no per-font-size or
+per-script special-casing.
+
+**Scroll-end detection** (section 20's first bullet): `performScrollTick()`
+is unmodified; `scriptText.getHeight()` (which already includes the new
+bottom padding in its measured height) makes `maxScroll` land later on
+its own, so scrolling continues through the trailing space using the
+existing tick loop and existing speed calculation, and
+`stopScrollingAtEnd()` still fires from the same two call sites, only
+later than before this round.
+
+**Short scripts**: even a script that fits entirely within one screen
+still has `maxScroll ≈ (OPENING_SPACE_FRACTION + END_SPACE_FRACTION − 1)
+× viewportHeight + textHeight`, i.e. positive (~0.275 × viewportHeight
+at minimum) purely from the two paddings, regardless of how short
+`textHeight` is — so scrolling always has real distance to travel and
+never stops immediately just because every line was already visible when
+it began.
+
+**Long scripts**: nothing about mid-script scrolling, speed, pause, or
+Resume changes — the trailing space only ever affects where the *true*
+maximum scroll position is, not how scrolling behaves before reaching it.
+
+**Scroll-position adjustment** (in
+`switchScriptPaddingPreservingPosition()`): if `scrollView.getScrollY() >
+0` when the padding changes, the new scroll position is `previousScrollY
++ (newTopPaddingPx - oldTopPaddingPx)`, clamped to `[0, contentHeight -
+viewportHeight]` — using the content height *after* both new paddings
+have been applied — applied after the padding change has been laid out
+(`scrollView.post(...)`). If already at scroll position 0, no adjustment
+is made — the new padding alone produces the correct look.
+
+**Intentional reset when Start Prompter or Restart is pressed**:
+`resetToWaitingFromTop()` always forces `scrollTo(0, 0)` regardless of
+where the preview or a previous full-screen session left off (section
+17) — this is a deliberate bypass of position preservation, not an
+oversight.
+
+**Preservation when returning to controls after pausing**: Back to
+Controls / Android Back from `PAUSED_FULLSCREEN`, Back from
+`END_OF_SCRIPT_WAITING`, and Back from `WAITING_FOR_TAP`, all go through
+`exitFullScreenToControls()`, which **does** go through
+`switchScriptPaddingPreservingPosition()`, so the controls-screen preview
+lands on approximately the same passage of text that was paused (or the
+top of the script, for `WAITING_FOR_TAP`) in full-screen mode — including
+from a position within the trailing end space, or from the fully
+centered end-of-script position itself.
+
+**Mirroring**: `applyMirror()` only ever sets `scaleX` on `scriptText`,
+`countdownText`, and `tapInstructionText` (section 16) — it has no
+interaction with padding or vertical layout at all, so horizontal
+mirroring never affects any of the above.
+
+**Pause and Resume through the trailing space**: `pauseFullScreenScrolling()`
+and the Resume path (`startCountdown(CountdownOrigin.RESUME)` →
+`beginActiveScrolling()`) never touch padding, so pausing partway through
+the trailing space and resuming behaves exactly like pausing anywhere
+else in the script (section 19) — `performScrollTick()` simply continues
+its existing tick loop toward the same (unchanged) `maxScroll`.
 
 ## 22. Exit and Android Back behavior
 
@@ -1087,17 +1179,22 @@ not inferred here.
 - The full-screen pause menu has been physically tested and is
   functional. Resume, Restart, and Back to Controls have all been
   physically tested.
+- The `END_OF_SCRIPT_WAITING` correction (unobstructed final text with
+  no automatic overlay, revealed only by a tap) has been physically
+  confirmed working on this device: scrolling stops, the final text
+  stays unobstructed, no menu appears automatically, and tapping reveals
+  Restart and Back to Controls.
 
-**Awaiting physical verification on the Lenovo**: the
-`END_OF_SCRIPT_WAITING` correction in this round — the final script text
-staying unobstructed with no overlay until a tap, the tap then revealing
-the reduced Restart/Back to Controls menu, and Android Back from that
-state going straight to `CONTROLS` — has not yet been installed and
-tested on this device. It must remain marked as awaiting verification
-until the corrected build from this round is confirmed there. Verified
-so far only by: successful build, the new `UiState` value and its
-transition methods confirmed present in the compiled `classes.dex`, and
-v1/v2 signature and zipalign checks.
+**Awaiting physical verification on the Lenovo**: the end-of-script
+vertical-centering refinement in this round — `END_SPACE_FRACTION`'s
+dynamic trailing space, and the final script line coming to rest at
+approximately the vertical midpoint of the screen rather than near the
+bottom edge — has not yet been installed and tested on this device. Do
+not claim it has been physically tested until that happens. Verified so
+far only by: successful build, `applyScriptPadding`,
+`switchScriptPaddingPreservingPosition`, and `END_SPACE_FRACTION`
+confirmed present in the compiled `classes.dex`, and v1/v2 signature and
+zipalign checks.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -1116,13 +1213,15 @@ version.
   Edit Script, Preview scrolling, full-screen Prompter mode, the pause
   menu, and Resume/Restart/Back to Controls are all functional on this
   device.
+- The `END_OF_SCRIPT_WAITING` correction has also been physically
+  confirmed working on this device, same as the Lenovo above.
 - The Nexus 7 has less usable screen space than the Lenovo, making it a
   useful compact-layout test in addition to the Lenovo.
 
 **Awaiting physical verification on the Nexus 7**: the same
-`END_OF_SCRIPT_WAITING` correction described above for the Lenovo — not
-yet installed or tested on this device either, since the corrected APK
-postdates this device's testing session.
+end-of-script vertical-centering refinement described above for the
+Lenovo — not yet installed or tested on this device either, since the
+corrected APK postdates this device's most recent testing session.
 
 ### Acer Iconia Tab A500
 
@@ -1251,5 +1350,5 @@ No other outstanding discrepancies between the current source and this
 documentation are known as of this round; every behavior described above
 was confirmed directly against `app/src/main/java/...`,
 `app/src/main/res/...`, `AndroidManifest.xml`, `app/build.gradle`, and
-`build.sh` as checked out at commit `8a7115d`, and, where noted, by
+`build.sh` as checked out at commit `d37883d`, and, where noted, by
 inspecting the compiled APK/DEX rather than the source alone.
