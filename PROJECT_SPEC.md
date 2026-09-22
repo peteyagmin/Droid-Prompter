@@ -3,14 +3,17 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `a32c196`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for two full-screen
-Prompter refinements on top of it: lowering the final resting position
-of the last script line (`END_SPACE_FRACTION` `0.5f` → `0.4f`, section
-21) and hiding the status/navigation bars throughout full-screen Prompter
-mode (section 22). The commit that lands this update is necessarily
-newer than `a32c196`; that commit's hash is reported separately at the
-end of the task that made these changes, not inferred here.
+**Documented as of commit `64ced0a`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated to record that the
+two full-screen Prompter refinements landed in that commit — lowering
+the final resting position of the last script line (`END_SPACE_FRACTION`
+`0.5f` → `0.4f`, section 21) and hiding the status/navigation bars
+throughout full-screen Prompter mode (section 22) — have now been
+physically confirmed on all three tracked devices, including the first
+confirmed Acer A500 test result in this project's history (section 26).
+The commit that lands this update is necessarily newer than `64ced0a`;
+that commit's hash is reported separately at the end of the task that
+made these changes, not inferred here.
 
 Throughout this document:
 
@@ -1313,23 +1316,14 @@ not inferred here.
   stays unobstructed, no menu appears automatically, and tapping reveals
   Restart and Back to Controls.
 
-**Awaiting physical verification on the Lenovo**: neither the prior
-`END_SPACE_FRACTION = 0.5f` end-of-script vertical-centering refinement
-nor this round's two further refinements — lowering that resting
-position to `END_SPACE_FRACTION = 0.4f` (section 21), and hiding the
-status/navigation bars throughout full-screen Prompter mode (section
-22) — has been installed and tested on this device. Do not claim any of
-these has been physically tested until that happens. Verified so far
-only by: successful build, `applyScriptPadding`,
-`switchScriptPaddingPreservingPosition`, `enterPrompterSystemUi`,
-`exitPrompterSystemUi`, `reapplyPrompterSystemUiIfNeeded`,
-`onWindowFocusChanged`, and `END_SPACE_FRACTION` all confirmed present
-in the compiled `classes.dex`, and v1/v2 signature and zipalign checks.
-In particular, the API 14–18 legacy system-bar behavior, the API 19+
-guarded immersive-sticky behavior, and the tap/window-focus reapplication
-logic are all unverified on real hardware — this device's exact Android
-version is not recorded in this repository (see above), so which of
-those two code paths it would even exercise is not known.
+- The lowered end-of-script resting position (`END_SPACE_FRACTION =
+  0.4f`, section 21) and full-screen status/navigation bar hiding
+  (section 22) have both been physically tested on this device and
+  reported working as expected. This device's exact Android version is
+  still not recorded in this repository, so which of the two system-bar
+  code paths (API 14–18 legacy vs. guarded API 19+ immersive-sticky,
+  section 22) it exercised is not stated here — only that the observed
+  behavior was correct either way.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -1353,37 +1347,38 @@ version.
 - The Nexus 7 has less usable screen space than the Lenovo, making it a
   useful compact-layout test in addition to the Lenovo.
 
-**Awaiting physical verification on the Nexus 7**: the same
-end-of-script vertical-centering refinements and the status/navigation
-bar hiding described above for the Lenovo — none of it has been
-installed or tested on this device either, since the corrected APK
-postdates this device's most recent testing session. This device runs
-API 23, so it would exercise the guarded API 19+ immersive-sticky code
-path specifically, which remains as unverified on hardware as the legacy
-path.
+- The same two refinements — the `0.4f` end-of-script resting position
+  and full-screen status/navigation bar hiding — have also been
+  physically tested on this device and reported working as expected.
+  Running API 23, this device specifically exercises the guarded API 19+
+  immersive-sticky system-bar code path (section 22).
 
 ### Acer Iconia Tab A500
 
-No physical testing on an actual Acer Iconia Tab A500 has occurred
-anywhere in this project's history — the repository contains no later
-confirmed test result for it. All A500-specific guidance (`README.md`'s
-troubleshooting section, the original target-hardware framing) is
-written for that device but remains unverified against it. Do not claim
-confirmed A500 storage, touch, keyboard, or scrolling behavior.
-Everything not explicitly listed above as Lenovo- or Nexus-7-tested
-should be considered to require A500 (or equivalent API 14
-device/emulator) testing, including: touch behavior of the
-tap-to-show/hide gesture over the auto-scrolling `ScrollView`,
-real-world auto-scroll smoothness on weaker hardware, the exact
-on-device rendering of the launcher icon and button-background
-drawables, and whether the A500's microSD mount path is among the
-legacy paths already checked (section 6). The A500 runs API 14, so it is
-the only device in this project's history that would exercise the legacy
-(API 14–18) system-bar hiding path (section 22) rather than the guarded
-API 19+ immersive-sticky path — that legacy path, including whether a
-touch actually reveals the navigation bar on this specific device and
-whether `reapplyPrompterSystemUiIfNeeded()` correctly re-hides it, is
-entirely unverified on real hardware.
+Physically tested on an actual Acer Iconia Tab A500 as of this round —
+the first confirmed test result for this device anywhere in this
+project's history. The user reported running the built APK on the
+device and confirmed both of this round's refinements work as expected:
+the lowered end-of-script resting position (`END_SPACE_FRACTION =
+0.4f`, section 21) and full-screen status/navigation bar hiding (section
+22). Running (the original target) Android 4.0/API 14, this is the only
+device in this project's history confirmed to exercise the legacy (API
+14–18) system-bar hiding path specifically, rather than the guarded API
+19+ immersive-sticky path — including a touch's effect on the navigation
+bar and `reapplyPrompterSystemUiIfNeeded()`'s reapplication of it.
+
+This confirmation covers those two specific refinements only. It is not
+a confirmation of every other feature this document describes as
+Lenovo- or Nexus-7-tested — nothing here states the A500 was used to
+retest, for example, the built-in file browser, New/Edit Script, the
+compact Script Editor layout, the pause menu, or Resume/Restart, and
+none of that should be inferred from this entry. Do not claim confirmed
+A500 behavior beyond what is stated here without a further report.
+Still not confirmed on this device specifically: real-world auto-scroll
+smoothness on weaker hardware, the exact on-device rendering of the
+launcher icon and button-background drawables, and whether the A500's
+microSD mount path is among the legacy paths already checked (section
+6).
 
 ### Android version warning: device- and version-dependent, not universal
 

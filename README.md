@@ -389,12 +389,9 @@ here). Confirmed on this device:
   tap, then the reduced Restart/Back to Controls menu) is physically
   tested and functional.
 
-**Awaiting physical verification**: neither the earlier refinement
-(automatic scrolling continuing past the last line to a centered reading
-position instead of stopping near the bottom edge) nor this round's two
-further refinements — lowering that resting position slightly, and
-hiding the status/navigation bars throughout full-screen Prompter mode —
-have been installed and tested on this device.
+- The lowered end-of-script resting position and full-screen
+  status/navigation bar hiding are also physically tested and confirmed
+  working on this device.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -409,17 +406,25 @@ Resume/Restart/Back to Controls, and the end-of-script behavior. Its
 smaller screen than the Lenovo's makes it a useful additional
 compact-layout check.
 
-**Awaiting physical verification**: the same refinements described above
-for the Lenovo have not yet been tested on this device either. Running
-API 23, this device would specifically exercise the newer immersive-mode
-system-bar behavior rather than the older device's legacy path.
+- The same refinements are also physically tested and confirmed working
+  on this device. Running API 23, this device specifically exercises the
+  newer immersive-mode system-bar behavior rather than the older
+  device's legacy path.
 
 ### Acer Iconia Tab A500
 
 The A500 running Android 4.0 (API 14) is this project's original target
-device. Physical testing on an actual A500 is still pending. In
-particular, none of the following has been confirmed on real A500
-hardware:
+device. Physically tested as of this round: the lowered end-of-script
+resting position and full-screen status/navigation bar hiding are
+confirmed working on real A500 hardware — the first confirmed test
+result for this device in this project's history. Running API 14, this
+is the only device confirmed to exercise the legacy (pre-immersive-mode)
+system-bar hiding path rather than the newer immersive-mode behavior.
+
+This confirms those two specific refinements only — it is not a retest
+of every other feature described elsewhere in this document as
+Lenovo- or Nexus-7-tested. None of the following has been confirmed on
+this device specifically:
 
 - Touch behavior of the tap-to-show/hide gesture over the
   auto-scrolling script view.
@@ -434,8 +439,9 @@ The "designed for an older Android version" warning is device- and
 version-dependent, not universal — see Android Compatibility above for
 the Lenovo-vs-Nexus-7 comparison.
 
-Treat any A500-specific claim elsewhere in this document as intent, not
-confirmed behavior, until this section is updated to say otherwise.
+Treat any A500-specific claim elsewhere in this document beyond the two
+refinements above as intent, not confirmed behavior, until this section
+is updated to say otherwise.
 
 ## Troubleshooting
 
