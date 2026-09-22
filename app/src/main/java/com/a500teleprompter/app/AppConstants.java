@@ -12,6 +12,14 @@ final class AppConstants {
 
     static final String EXTRA_FILE_PATH = "com.a500teleprompter.app.EXTRA_FILE_PATH";
 
+    static final String EXTRA_EDITOR_MODE = "com.a500teleprompter.app.EXTRA_EDITOR_MODE";
+    static final String EXTRA_EDIT_FILE_PATH = "com.a500teleprompter.app.EXTRA_EDIT_FILE_PATH";
+    static final String EXTRA_SAVED_FILE_PATH = "com.a500teleprompter.app.EXTRA_SAVED_FILE_PATH";
+    static final String EXTRA_EDITOR_WAS_NEW = "com.a500teleprompter.app.EXTRA_EDITOR_WAS_NEW";
+
+    static final int EDITOR_MODE_CREATE_NEW = 1;
+    static final int EDITOR_MODE_EDIT_EXISTING = 2;
+
     private AppConstants() {
     }
 }

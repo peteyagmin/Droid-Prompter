@@ -3,6 +3,7 @@
     package="com.a500teleprompter.app">
 
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 
     <application
         android:allowBackup="true"
@@ -25,6 +26,12 @@
             android:name=".FileBrowserActivity"
             android:label="@string/file_browser_title"
             android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".ScriptEditorActivity"
+            android:label="@string/script_editor_title"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustResize" />
 
     </application>
 

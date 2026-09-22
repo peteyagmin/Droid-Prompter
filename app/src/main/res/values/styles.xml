@@ -14,7 +14,7 @@
         <item name="android:textAllCaps">false</item>
     </style>
 
-    <!-- Visually secondary controls: Return to Top, Mirror, Exit. Smaller
+    <!-- Visually secondary controls: Mirror, Exit, Preview/Stop. Smaller
          than ControlButton so Enter Prompter reads as the primary action. -->
     <style name="SecondaryControlButton">
         <item name="android:minHeight">@dimen/secondary_button_height</item>

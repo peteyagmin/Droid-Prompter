@@ -1,6 +1,8 @@
 package com.a500teleprompter.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -32,6 +34,7 @@ public class MainActivity extends Activity {
     }
 
     private static final int REQUEST_CODE_BROWSE_FILE = 100;
+    private static final int REQUEST_CODE_EDIT_SCRIPT = 200;
 
     private static final float MIN_FONT_SIZE_SP = 14f;
     private static final float MAX_FONT_SIZE_SP = 96f;
@@ -102,8 +105,9 @@ public class MainActivity extends Activity {
         btnPreview = (Button) findViewById(R.id.btnPreview);
 
         Button btnOpenFile = (Button) findViewById(R.id.btnOpenFile);
+        Button btnNewScript = (Button) findViewById(R.id.btnNewScript);
+        Button btnEditScript = (Button) findViewById(R.id.btnEditScript);
         Button btnStart = (Button) findViewById(R.id.btnStart);
-        Button btnBeginning = (Button) findViewById(R.id.btnBeginning);
         Button btnFontDecrease = (Button) findViewById(R.id.btnFontDecrease);
         Button btnFontIncrease = (Button) findViewById(R.id.btnFontIncrease);
         Button btnExit = (Button) findViewById(R.id.btnExit);
@@ -178,10 +182,28 @@ public class MainActivity extends Activity {
             }
         });
 
-        btnBeginning.setOnClickListener(new View.OnClickListener() {
+        btnNewScript.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                returnToBeginning();
+                stopPreviewScrolling();
+                Intent intent = new Intent(MainActivity.this, ScriptEditorActivity.class);
+                intent.putExtra(AppConstants.EXTRA_EDITOR_MODE, AppConstants.EDITOR_MODE_CREATE_NEW);
+                startActivityForResult(intent, REQUEST_CODE_EDIT_SCRIPT);
+            }
+        });
+
+        btnEditScript.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (loadedFilePath == null) {
+                    Toast.makeText(MainActivity.this, R.string.no_script_to_edit, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                stopPreviewScrolling();
+                Intent intent = new Intent(MainActivity.this, ScriptEditorActivity.class);
+                intent.putExtra(AppConstants.EXTRA_EDITOR_MODE, AppConstants.EDITOR_MODE_EDIT_EXISTING);
+                intent.putExtra(AppConstants.EXTRA_EDIT_FILE_PATH, loadedFilePath);
+                startActivityForResult(intent, REQUEST_CODE_EDIT_SCRIPT);
             }
         });
 
@@ -305,7 +327,47 @@ public class MainActivity extends Activity {
             if (path != null) {
                 loadScriptFile(path);
             }
+        } else if (requestCode == REQUEST_CODE_EDIT_SCRIPT && resultCode == RESULT_OK && data != null) {
+            String savedPath = data.getStringExtra(AppConstants.EXTRA_SAVED_FILE_PATH);
+            boolean wasNew = data.getBooleanExtra(AppConstants.EXTRA_EDITOR_WAS_NEW, false);
+            if (savedPath == null) {
+                return;
+            }
+            if (wasNew) {
+                promptLoadNewlySavedScript(savedPath);
+            } else {
+                // Editing the already-loaded script: reload it automatically,
+                // no prompt needed.
+                loadScriptFile(savedPath);
+            }
         }
+    }
+
+    private void promptLoadNewlySavedScript(final String path) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.script_saved_title)
+                .setMessage(getString(R.string.load_new_script_prompt, new File(path).getName()))
+                .setCancelable(false)
+                .setPositiveButton(R.string.dialog_yes, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        loadScriptFile(path);
+                    }
+                })
+                .setNegativeButton(R.string.dialog_no, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        clearLoadedScript();
+                    }
+                })
+                .show();
+    }
+
+    private void clearLoadedScript() {
+        loadedFilePath = null;
+        scriptText.setText(R.string.default_script_placeholder);
+        updateLoadedFileLabel();
+        scrollView.scrollTo(0, 0);
     }
 
     private void loadPreferences() {
@@ -439,6 +501,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Enter Prompter always begins a fresh full-screen session from the very
+     * top of the script -- regardless of the prior manual preview position,
+     * where Preview scrolling was stopped, a paused full-screen position
+     * from an earlier session, or whether the previous session reached the
+     * end. This deliberately bypasses switchTopPaddingPreservingPosition's
+     * delta-preserving logic (reserved for exitFullScreenToControls(),
+     * where pausing mid-script and returning to the preview should keep the
+     * same passage on screen) and jumps straight to scrollY 0 instead.
+     */
     private void enterFullScreenWaitingFromControls() {
         if (uiState != UiState.CONTROLS) {
             return;
@@ -449,19 +521,17 @@ public class MainActivity extends Activity {
         }
         scrollHandler.removeCallbacksAndMessages(null);
         stopPreviewScrolling();
+        atScriptEnd = false;
         uiState = UiState.WAITING_FOR_TAP;
         scriptText.setKeepScreenOn(false);
         refreshStateVisibility();
-        // atScriptEnd is intentionally left as-is here rather than reset:
-        // the script's scroll position did not change by entering full
-        // screen, so whether it is still at its end is re-checked against
-        // actual geometry once the full-screen layout has settled.
-        //
-        // The dynamic opening-buffer padding also depends on the
-        // full-screen viewport height, which is only accurate after
-        // controlsPanel's visibility change (just requested above) has
-        // actually been laid out -- hence the same post()-after-layout
-        // pattern used elsewhere in this class.
+        // The dynamic opening-buffer padding depends on the full-screen
+        // viewport height, which is only accurate after controlsPanel's
+        // visibility change (just requested above) has actually been laid
+        // out -- hence the post()-after-layout pattern used elsewhere in
+        // this class. A second, nested post() waits for that padding
+        // change to be laid out in turn before scrolling to 0, though
+        // scrollTo(0, 0) itself needs no measurement to be valid.
         scrollView.post(new Runnable() {
             @Override
             public void run() {
@@ -469,31 +539,15 @@ public class MainActivity extends Activity {
                 int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
                 int newTopPaddingPx = Math.max(sidePaddingPx,
                         Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
-                switchTopPaddingPreservingPosition(newTopPaddingPx, new Runnable() {
+                scriptText.setPadding(sidePaddingPx, newTopPaddingPx, sidePaddingPx, sidePaddingPx);
+                scrollView.post(new Runnable() {
                     @Override
                     public void run() {
-                        recomputeAtScriptEndAfterLayout();
+                        scrollView.scrollTo(0, 0);
                     }
                 });
             }
         });
-    }
-
-    /**
-     * Re-evaluates atScriptEnd against the actual (now full-screen)
-     * ScrollView geometry after entering WAITING_FOR_TAP, so a script left
-     * scrolled to its end stays marked atScriptEnd, while one the user
-     * manually scrolled away from the end is correctly un-marked. Guarded
-     * on uiState in case the user already moved on by the time this
-     * deferred check runs.
-     */
-    private void recomputeAtScriptEndAfterLayout() {
-        if (uiState != UiState.WAITING_FOR_TAP) {
-            return;
-        }
-        int maxScroll = scriptText.getHeight() - scrollView.getHeight();
-        atScriptEnd = maxScroll > 0 && scrollView.getScrollY() >= maxScroll;
-        refreshStateVisibility();
     }
 
     private void startCountdown() {
@@ -552,21 +606,6 @@ public class MainActivity extends Activity {
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
         switchTopPaddingPreservingPosition(dpToPx(SCRIPT_PADDING_DP), null);
-    }
-
-    private void returnToBeginning() {
-        scrollHandler.removeCallbacksAndMessages(null);
-        stopPreviewScrolling();
-        scriptText.setKeepScreenOn(false);
-        atScriptEnd = false;
-        uiState = UiState.CONTROLS;
-        refreshStateVisibility();
-        // Return to Top always jumps to the very start, so it sets the
-        // minimal CONTROLS padding directly instead of going through
-        // switchTopPaddingPreservingPosition's delta-preserving logic.
-        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        scriptText.setPadding(sidePaddingPx, sidePaddingPx, sidePaddingPx, sidePaddingPx);
-        scrollView.scrollTo(0, 0);
     }
 
     private void performScrollTick() {
@@ -638,8 +677,8 @@ public class MainActivity extends Activity {
      * inactive: this is the single stop path called both directly (the
      * Preview/Stop button) and defensively from every control that must
      * not let preview scrolling keep running underneath it (Enter
-     * Prompter, Load Script, Return to Top, Exit, Back, and the Activity
-     * lifecycle via exitFullScreenToControls()).
+     * Prompter, New Script, Edit Script, Load Script, Exit, Back, and the
+     * Activity lifecycle via exitFullScreenToControls()).
      */
     private void stopPreviewScrolling() {
         if (!previewScrolling) {

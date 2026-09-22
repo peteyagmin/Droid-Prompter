@@ -13,7 +13,7 @@
         android:background="@color/background_black"
         android:padding="@dimen/control_padding">
 
-        <!-- Top file row: [ Load Script ]  Loaded: filename  [ Return to Top ] -->
+        <!-- Top file row: [Load Script][New Script]  Loaded: filename  [Edit Script] -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -28,6 +28,17 @@
                 android:layout_weight="1"
                 android:textSize="@dimen/secondary_text_size"
                 android:text="@string/btn_open_file" />
+
+            <Button
+                android:id="@+id/btnNewScript"
+                style="@style/ControlButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginLeft="8dp"
+                android:layout_marginStart="8dp"
+                android:textSize="@dimen/secondary_text_size"
+                android:text="@string/btn_new_script" />
 
             <TextView
                 android:id="@+id/currentFileLabel"
@@ -46,12 +57,13 @@
                 android:ellipsize="middle" />
 
             <Button
-                android:id="@+id/btnBeginning"
-                style="@style/SecondaryControlButton"
+                android:id="@+id/btnEditScript"
+                style="@style/ControlButton"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="@string/btn_beginning" />
+                android:textSize="@dimen/secondary_text_size"
+                android:text="@string/btn_edit_script" />
         </LinearLayout>
 
         <!-- Primary action row: Enter Prompter (dominant) + Mirror + Exit -->
