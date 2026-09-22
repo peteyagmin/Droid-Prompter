@@ -67,6 +67,8 @@ public class MainActivity extends Activity {
     private SeekBar speedSeekBar;
     private ToggleButton mirrorToggle;
     private Button btnPreview;
+    private Button btnStart;
+    private Button btnEditScript;
 
     private SharedPreferences prefs;
     private final Handler scrollHandler = new Handler();
@@ -103,11 +105,11 @@ public class MainActivity extends Activity {
         speedSeekBar = (SeekBar) findViewById(R.id.speedSeekBar);
         mirrorToggle = (ToggleButton) findViewById(R.id.mirrorToggle);
         btnPreview = (Button) findViewById(R.id.btnPreview);
+        btnStart = (Button) findViewById(R.id.btnStart);
+        btnEditScript = (Button) findViewById(R.id.btnEditScript);
 
         Button btnOpenFile = (Button) findViewById(R.id.btnOpenFile);
         Button btnNewScript = (Button) findViewById(R.id.btnNewScript);
-        Button btnEditScript = (Button) findViewById(R.id.btnEditScript);
-        Button btnStart = (Button) findViewById(R.id.btnStart);
         Button btnFontDecrease = (Button) findViewById(R.id.btnFontDecrease);
         Button btnFontIncrease = (Button) findViewById(R.id.btnFontIncrease);
         Button btnExit = (Button) findViewById(R.id.btnExit);
@@ -130,8 +132,15 @@ public class MainActivity extends Activity {
             pendingRestoreScrollY = savedInstanceState.getInt(STATE_SCROLL_Y, -1);
             updateLoadedFileLabel();
         } else if (loadedFilePath != null) {
-            loadScriptFile(loadedFilePath);
+            // loadScriptFile() only re-sets loadedFilePath on success; if the
+            // remembered file no longer exists or can't be read, it must not
+            // be left pointing at a path whose content was never actually
+            // loaded into scriptText.
+            String pathToRestore = loadedFilePath;
+            loadedFilePath = null;
+            loadScriptFile(pathToRestore);
         }
+        updateLoadedScriptDependentControls();
 
         scrollRunnable = new Runnable() {
             @Override
@@ -327,47 +336,84 @@ public class MainActivity extends Activity {
             if (path != null) {
                 loadScriptFile(path);
             }
-        } else if (requestCode == REQUEST_CODE_EDIT_SCRIPT && resultCode == RESULT_OK && data != null) {
-            String savedPath = data.getStringExtra(AppConstants.EXTRA_SAVED_FILE_PATH);
-            boolean wasNew = data.getBooleanExtra(AppConstants.EXTRA_EDITOR_WAS_NEW, false);
-            if (savedPath == null) {
-                return;
-            }
-            if (wasNew) {
-                promptLoadNewlySavedScript(savedPath);
-            } else {
-                // Editing the already-loaded script: reload it automatically,
-                // no prompt needed.
-                loadScriptFile(savedPath);
+        } else if (requestCode == REQUEST_CODE_EDIT_SCRIPT) {
+            if (resultCode == RESULT_OK && data != null) {
+                String savedPath = data.getStringExtra(AppConstants.EXTRA_SAVED_FILE_PATH);
+                boolean wasNew = data.getBooleanExtra(AppConstants.EXTRA_EDITOR_WAS_NEW, false);
+                if (savedPath == null) {
+                    return;
+                }
+                if (wasNew) {
+                    promptLoadNewlySavedScript(savedPath);
+                } else {
+                    // Editing the already-loaded script: reload it
+                    // automatically, no prompt needed.
+                    loadScriptFile(savedPath);
+                    Toast.makeText(this, R.string.script_saved_toast, Toast.LENGTH_SHORT).show();
+                }
+            } else if (data != null && data.getBooleanExtra(AppConstants.EXTRA_EDIT_FILE_UNAVAILABLE, false)) {
+                // The file being edited turned out to be unreadable or gone
+                // by the time the editor tried to load it -- the loaded
+                // script is no longer valid, so fall back to the no-script
+                // state rather than leaving a stale filename displayed.
+                applyNoScriptState();
             }
         }
     }
 
     private void promptLoadNewlySavedScript(final String path) {
         new AlertDialog.Builder(this)
-                .setTitle(R.string.script_saved_title)
-                .setMessage(getString(R.string.load_new_script_prompt, new File(path).getName()))
+                .setTitle(R.string.new_script_saved_title)
+                .setMessage(R.string.new_script_saved_message)
                 .setCancelable(false)
                 .setPositiveButton(R.string.dialog_yes, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
+                        SharedPreferences.Editor editor = prefs.edit();
+                        editor.putString(AppConstants.KEY_LAST_DIRECTORY,
+                                StorageLocations.getTeleprompterFolder().getAbsolutePath());
+                        editor.commit();
                         loadScriptFile(path);
                     }
                 })
                 .setNegativeButton(R.string.dialog_no, new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
-                        clearLoadedScript();
+                        applyNoScriptState();
                     }
                 })
                 .show();
     }
 
-    private void clearLoadedScript() {
+    /**
+     * Centralized "no script loaded" reset, used both when the user declines
+     * to load a newly created script and when a previously loaded file turns
+     * out to be unavailable. Leaves font size, speed, mirror, last-used
+     * directory, and all other saved preferences untouched.
+     */
+    private void applyNoScriptState() {
+        stopPreviewScrolling();
         loadedFilePath = null;
+        atScriptEnd = false;
+        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        scriptText.setPadding(sidePaddingPx, sidePaddingPx, sidePaddingPx, sidePaddingPx);
         scriptText.setText(R.string.default_script_placeholder);
         updateLoadedFileLabel();
         scrollView.scrollTo(0, 0);
+        updateLoadedScriptDependentControls();
+    }
+
+    /**
+     * Enter Prompter, Edit Script, and Preview only make sense once a valid
+     * script is loaded; Load Script, New Script, Mirror, and Exit remain
+     * available regardless. Called after every change to loadedFilePath so
+     * the three buttons can never disagree with whether a script is loaded.
+     */
+    private void updateLoadedScriptDependentControls() {
+        boolean hasScript = loadedFilePath != null;
+        btnStart.setEnabled(hasScript);
+        btnEditScript.setEnabled(hasScript);
+        btnPreview.setEnabled(hasScript);
     }
 
     private void loadPreferences() {
@@ -407,6 +453,7 @@ public class MainActivity extends Activity {
         scriptText.setText(result.text);
         loadedFilePath = path;
         updateLoadedFileLabel();
+        updateLoadedScriptDependentControls();
         savePreferences();
         scrollView.post(new Runnable() {
             @Override

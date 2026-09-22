@@ -35,10 +35,20 @@
     <string name="filename_hint">Filename</string>
     <string name="btn_save">Save</string>
     <string name="filename_required">Enter a filename before saving.</string>
-    <string name="filename_invalid_chars">Filename cannot contain a slash.</string>
+    <string name="filename_invalid_chars">Filename contains characters that cannot be used.</string>
+    <string name="script_content_required">Enter some script text before saving.</string>
+    <string name="storage_unavailable">Storage is not available or is read-only.</string>
     <string name="script_save_failed">The script could not be saved.</string>
-    <string name="script_saved_title">Script Saved</string>
-    <string name="load_new_script_prompt">Load \"%1$s\" now?</string>
+    <string name="script_saved_toast">Script saved</string>
+    <string name="file_already_exists_title">File Already Exists</string>
+    <string name="file_already_exists_message">A script with this name already exists. Replace it?</string>
+    <string name="btn_replace">Replace</string>
+    <string name="discard_changes_title">Discard Changes?</string>
+    <string name="discard_changes_message">Your unsaved changes will be lost.</string>
+    <string name="btn_discard">Discard</string>
+    <string name="btn_keep_editing">Keep Editing</string>
+    <string name="new_script_saved_title">New Script Saved</string>
+    <string name="new_script_saved_message">Would you like to load this new script now?</string>
     <string name="dialog_yes">Yes</string>
     <string name="dialog_no">No</string>
 
