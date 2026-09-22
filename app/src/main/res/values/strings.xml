@@ -35,6 +35,7 @@
     <string name="script_filename_label">Script Filename</string>
     <string name="filename_hint">Enter a filename</string>
     <string name="script_text_label">Script Text</string>
+    <string name="btn_edit_filename">Edit Filename</string>
     <string name="script_body_hint">Type or paste your script here</string>
     <string name="btn_save">Save</string>
     <string name="filename_required">Enter a filename before saving.</string>

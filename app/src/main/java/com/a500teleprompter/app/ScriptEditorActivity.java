@@ -4,11 +4,13 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Environment;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
@@ -40,13 +42,22 @@ public class ScriptEditorActivity extends Activity {
     private static final String STATE_BASELINE_BODY = "state_baseline_body";
     private static final String STATE_SELECTION_START = "state_selection_start";
     private static final String STATE_SELECTION_END = "state_selection_end";
+    private static final String STATE_FILENAME_SELECTION_START = "state_filename_selection_start";
+    private static final String STATE_FILENAME_SELECTION_END = "state_filename_selection_end";
+    private static final String STATE_COMPACT_MODE = "state_compact_mode";
+    private static final String STATE_FOCUS_ON_BODY = "state_focus_on_body";
 
     private int editorMode;
     private String existingFilePath;
 
     private TextView titleText;
+    private View titleAndFilenameSection;
     private EditText filenameField;
     private EditText scriptBodyField;
+    private View btnEditFilename;
+
+    /** Whether the title+filename section is currently collapsed to give scriptBodyField room above the keyboard. */
+    private boolean compactMode;
 
     /** Snapshot of the fields' content as of the last open or successful save, used to detect unsaved changes. */
     private String baselineFilename = "";
@@ -58,8 +69,10 @@ public class ScriptEditorActivity extends Activity {
         setContentView(R.layout.activity_script_editor);
 
         titleText = (TextView) findViewById(R.id.editorTitleText);
+        titleAndFilenameSection = findViewById(R.id.titleAndFilenameSection);
         filenameField = (EditText) findViewById(R.id.filenameField);
         scriptBodyField = (EditText) findViewById(R.id.scriptBodyField);
+        btnEditFilename = findViewById(R.id.btnEditFilename);
         Button btnCancel = (Button) findViewById(R.id.btnEditorCancel);
         Button btnSave = (Button) findViewById(R.id.btnEditorSave);
 
@@ -83,19 +96,55 @@ public class ScriptEditorActivity extends Activity {
         }
 
         // filenameField's imeOptions offers a "Next" action (see
-        // activity_script_editor.xml); this is the only place that
-        // consumes it, moving focus to the script body without ever
-        // touching either field's imeOptions.
+        // activity_script_editor.xml). Some keyboards honor actionNext and
+        // call onEditorAction with IME_ACTION_NEXT; others (seen on
+        // hardware) instead send a raw Enter key. Both are handled here,
+        // routed through the same guarded method so a single key press
+        // can never advance focus twice.
         filenameField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (actionId == EditorInfo.IME_ACTION_NEXT) {
-                    scriptBodyField.requestFocus();
+                    advanceFromFilenameToBody();
                     return true;
                 }
                 return false;
             }
         });
+        filenameField.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (keyCode == KeyEvent.KEYCODE_ENTER
+                        && event.getAction() == KeyEvent.ACTION_DOWN
+                        && event.getRepeatCount() == 0) {
+                    advanceFromFilenameToBody();
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        // Focusing scriptBodyField is what triggers compact mode: the
+        // title+filename section collapses to give the body the vertical
+        // space the keyboard would otherwise eat.
+        scriptBodyField.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    enterCompactMode();
+                    ensureVisibleAboveKeyboard(scriptBodyField);
+                }
+            }
+        });
+
+        btnEditFilename.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                exitCompactModeForFilenameEdit();
+            }
+        });
+
+        applyInitialFocusAndCompactState(savedInstanceState);
 
         btnCancel.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -132,6 +181,10 @@ public class ScriptEditorActivity extends Activity {
         outState.putString(STATE_BASELINE_BODY, baselineBody);
         outState.putInt(STATE_SELECTION_START, scriptBodyField.getSelectionStart());
         outState.putInt(STATE_SELECTION_END, scriptBodyField.getSelectionEnd());
+        outState.putInt(STATE_FILENAME_SELECTION_START, filenameField.getSelectionStart());
+        outState.putInt(STATE_FILENAME_SELECTION_END, filenameField.getSelectionEnd());
+        outState.putBoolean(STATE_COMPACT_MODE, compactMode);
+        outState.putBoolean(STATE_FOCUS_ON_BODY, scriptBodyField.hasFocus());
     }
 
     private void restoreUnsavedState(Bundle savedInstanceState) {
@@ -152,6 +205,100 @@ public class ScriptEditorActivity extends Activity {
         if (selStart >= 0 && selEnd >= 0 && selStart <= length && selEnd <= length) {
             scriptBodyField.setSelection(selStart, selEnd);
         }
+    }
+
+    /**
+     * Decides, once on creation, whether the editor should open in compact
+     * mode and which field should hold focus. EDIT_EXISTING always jumps
+     * straight into the body in compact mode since filenameField is
+     * disabled there. CREATE_NEW without saved state leaves the default
+     * (title+filename visible, first focusable field focused) untouched.
+     * A configuration change restores whichever field the user was
+     * actually in, favoring the body whenever compact mode was active.
+     */
+    private void applyInitialFocusAndCompactState(Bundle savedInstanceState) {
+        if (savedInstanceState != null) {
+            boolean wasCompact = savedInstanceState.getBoolean(STATE_COMPACT_MODE, false);
+            boolean focusWasOnBody = savedInstanceState.getBoolean(STATE_FOCUS_ON_BODY, false);
+            if (wasCompact || focusWasOnBody) {
+                scriptBodyField.requestFocus();
+            } else {
+                filenameField.requestFocus();
+                int start = savedInstanceState.getInt(STATE_FILENAME_SELECTION_START, -1);
+                int end = savedInstanceState.getInt(STATE_FILENAME_SELECTION_END, -1);
+                int length = filenameField.getText().length();
+                if (start >= 0 && end >= 0 && start <= length && end <= length) {
+                    filenameField.setSelection(start, end);
+                }
+            }
+        } else if (editorMode == AppConstants.EDITOR_MODE_EDIT_EXISTING) {
+            scriptBodyField.requestFocus();
+        }
+    }
+
+    private void enterCompactMode() {
+        if (compactMode) {
+            return;
+        }
+        compactMode = true;
+        titleAndFilenameSection.setVisibility(View.GONE);
+        if (editorMode == AppConstants.EDITOR_MODE_CREATE_NEW) {
+            btnEditFilename.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /**
+     * Restores the title+filename section without touching filenameField's
+     * text or triggering a save, then hands focus back to it so the user
+     * can correct the filename.
+     */
+    private void exitCompactModeForFilenameEdit() {
+        compactMode = false;
+        titleAndFilenameSection.setVisibility(View.VISIBLE);
+        btnEditFilename.setVisibility(View.GONE);
+        filenameField.requestFocus();
+        filenameField.setSelection(filenameField.getText().length());
+        showKeyboardFor(filenameField);
+        ensureVisibleAboveKeyboard(filenameField);
+    }
+
+    /**
+     * Consumes filenameField's Next/Enter, never inserting a newline and
+     * never treating it as Save. Guarded against double-firing: once the
+     * body already has focus, a second Next/Enter event for the same
+     * keypress (some keyboards deliver both an editor action and a raw
+     * key event) is a no-op.
+     */
+    private void advanceFromFilenameToBody() {
+        if (scriptBodyField.hasFocus()) {
+            return;
+        }
+        scriptBodyField.requestFocus();
+        scriptBodyField.setSelection(scriptBodyField.getText().length());
+        showKeyboardFor(scriptBodyField);
+    }
+
+    /** Scrolls/pans the given field into view above the keyboard once the pending layout pass settles; API 14-safe. */
+    private void ensureVisibleAboveKeyboard(final View view) {
+        view.post(new Runnable() {
+            @Override
+            public void run() {
+                view.requestRectangleOnScreen(new Rect(0, 0, view.getWidth(), view.getHeight()), true);
+            }
+        });
+    }
+
+    /** Explicitly keeps the soft keyboard open across a focus hand-off between two EditTexts. */
+    private void showKeyboardFor(final View view) {
+        view.post(new Runnable() {
+            @Override
+            public void run() {
+                InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                if (imm != null) {
+                    imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT);
+                }
+            }
+        });
     }
 
     private void setUpCreateNew() {
