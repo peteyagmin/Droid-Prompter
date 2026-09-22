@@ -25,4 +25,18 @@
         <item name="android:textAllCaps">false</item>
     </style>
 
+    <!-- Shared by btnEditorCancel and btnEditorSave only, so the two can
+         never independently diverge from each other again. Kept as its
+         own style (not just an alias of SecondaryControlButton) so a
+         future change to the main screen's secondary buttons can't
+         silently resize the editor's Cancel/Save row too. -->
+    <style name="EditorActionButton">
+        <item name="android:minHeight">@dimen/secondary_button_height</item>
+        <item name="android:textSize">@dimen/secondary_text_size</item>
+        <item name="android:textColor">@color/text_white</item>
+        <item name="android:background">@drawable/button_background</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
 </resources>

@@ -55,6 +55,7 @@ public class ScriptEditorActivity extends Activity {
     private EditText filenameField;
     private EditText scriptBodyField;
     private View btnEditFilename;
+    private View editorButtonRow;
 
     /** Whether the title+filename section is currently collapsed to give scriptBodyField room above the keyboard. */
     private boolean compactMode;
@@ -73,6 +74,7 @@ public class ScriptEditorActivity extends Activity {
         filenameField = (EditText) findViewById(R.id.filenameField);
         scriptBodyField = (EditText) findViewById(R.id.scriptBodyField);
         btnEditFilename = findViewById(R.id.btnEditFilename);
+        editorButtonRow = findViewById(R.id.editorButtonRow);
         Button btnCancel = (Button) findViewById(R.id.btnEditorCancel);
         Button btnSave = (Button) findViewById(R.id.btnEditorSave);
 
@@ -121,6 +123,21 @@ public class ScriptEditorActivity extends Activity {
                     return true;
                 }
                 return false;
+            }
+        });
+
+        // Focusing filenameField shows the title+filename section and
+        // hides editorButtonRow: Save shouldn't look actionable before
+        // the user has advanced to the script body, and the filename
+        // field should be the clear focus of the screen while it's
+        // being typed.
+        filenameField.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (hasFocus) {
+                    showFilenameSection();
+                    ensureVisibleAboveKeyboard(filenameField);
+                }
             }
         });
 
@@ -211,10 +228,11 @@ public class ScriptEditorActivity extends Activity {
      * Decides, once on creation, whether the editor should open in compact
      * mode and which field should hold focus. EDIT_EXISTING always jumps
      * straight into the body in compact mode since filenameField is
-     * disabled there. CREATE_NEW without saved state leaves the default
-     * (title+filename visible, first focusable field focused) untouched.
-     * A configuration change restores whichever field the user was
-     * actually in, favoring the body whenever compact mode was active.
+     * disabled there. CREATE_NEW without saved state explicitly focuses
+     * filenameField, so its own OnFocusChangeListener reliably fires and
+     * hides editorButtonRow before the first frame is shown. A
+     * configuration change restores whichever field the user was actually
+     * in, favoring the body whenever compact mode was active.
      */
     private void applyInitialFocusAndCompactState(Bundle savedInstanceState) {
         if (savedInstanceState != null) {
@@ -233,6 +251,8 @@ public class ScriptEditorActivity extends Activity {
             }
         } else if (editorMode == AppConstants.EDITOR_MODE_EDIT_EXISTING) {
             scriptBodyField.requestFocus();
+        } else {
+            filenameField.requestFocus();
         }
     }
 
@@ -242,24 +262,36 @@ public class ScriptEditorActivity extends Activity {
         }
         compactMode = true;
         titleAndFilenameSection.setVisibility(View.GONE);
+        editorButtonRow.setVisibility(View.VISIBLE);
         if (editorMode == AppConstants.EDITOR_MODE_CREATE_NEW) {
             btnEditFilename.setVisibility(View.VISIBLE);
         }
     }
 
     /**
-     * Restores the title+filename section without touching filenameField's
-     * text or triggering a save, then hands focus back to it so the user
-     * can correct the filename.
+     * Shows the title+filename section and hides editorButtonRow /
+     * btnEditFilename. Used both by filenameField's own focus listener
+     * (covering the field's very first focus) and by
+     * exitCompactModeForFilenameEdit() below, via that same listener
+     * firing when focus actually moves onto the field.
      */
-    private void exitCompactModeForFilenameEdit() {
+    private void showFilenameSection() {
         compactMode = false;
         titleAndFilenameSection.setVisibility(View.VISIBLE);
+        editorButtonRow.setVisibility(View.GONE);
         btnEditFilename.setVisibility(View.GONE);
+    }
+
+    /**
+     * Hands focus back to filenameField without touching its text or
+     * triggering a save; showFilenameSection() runs as a side effect of
+     * that focus change via filenameField's own OnFocusChangeListener,
+     * the same way enterCompactMode() runs off of scriptBodyField's.
+     */
+    private void exitCompactModeForFilenameEdit() {
         filenameField.requestFocus();
         filenameField.setSelection(filenameField.getText().length());
         showKeyboardFor(filenameField);
-        ensureVisibleAboveKeyboard(filenameField);
     }
 
     /**

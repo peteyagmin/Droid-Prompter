@@ -91,10 +91,17 @@ report the discrepancy before proceeding.
   title+filename section when `scriptBodyField` gains focus, with an
   "Edit Filename" control (CREATE_NEW mode only) to bring it back. See
   `PROJECT_SPEC.md` section 11.
-- Save and Cancel in the Script Editor use matching text sizes
-  (`@dimen/secondary_text_size`, 16sp) — Save carries an explicit
-  `android:textSize` override on top of `ControlButton`; do not remove it
-  without re-verifying both buttons still match.
+- Save and Cancel in the Script Editor share one style,
+  `EditorActionButton` (a standalone style, not an alias of
+  `SecondaryControlButton`/`ControlButton`), so they're geometrically
+  identical — same height, padding, and 16sp text. Do not give either
+  button a per-instance override; if they ever need to look different
+  again, change `EditorActionButton` itself or split it into two
+  editor-specific styles, not ad hoc overrides on one button.
+- `editorButtonRow` (the Cancel/Save row) is hidden (`GONE`) while
+  `filenameField` has focus in CREATE_NEW mode, and shown once
+  `scriptBodyField` has focus (compact mode). Don't assume it's always
+  visible when editing the layout or the focus-change listeners.
 - Inspect source for exact labels, dimensions, styles, and button
   placement rather than assuming any of the above stays byte-for-byte
   accurate over time.

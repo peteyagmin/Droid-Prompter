@@ -33,7 +33,7 @@
     <string name="title_new_script">New Script</string>
     <string name="title_edit_script">Edit Script</string>
     <string name="script_filename_label">Script Filename</string>
-    <string name="filename_hint">Enter a filename</string>
+    <string name="filename_hint">Enter a filename, then press Enter or Next</string>
     <string name="script_text_label">Script Text</string>
     <string name="btn_edit_filename">Edit Filename</string>
     <string name="script_body_hint">Type or paste your script here</string>

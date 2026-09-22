@@ -96,14 +96,16 @@
         android:padding="16dp" />
 
     <LinearLayout
+        android:id="@+id/editorButtonRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="12dp">
+        android:layout_marginTop="12dp"
+        android:visibility="gone">
 
         <Button
             android:id="@+id/btnEditorCancel"
-            style="@style/SecondaryControlButton"
+            style="@style/EditorActionButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -113,11 +115,10 @@
 
         <Button
             android:id="@+id/btnEditorSave"
-            style="@style/ControlButton"
+            style="@style/EditorActionButton"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="@dimen/secondary_text_size"
             android:text="@string/btn_save" />
     </LinearLayout>
 

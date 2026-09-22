@@ -226,9 +226,9 @@ Source: `FileBrowserActivity.java`, `StorageLocations.java`,
 - `setUpCreateNew()`: title "New Script" (`title_new_script`),
   `filenameField` enabled and cleared, `scriptBodyField` cleared,
   baseline snapshot taken.
-- Persistent field labels/hints (unchanged since prior rounds, must not
-  be altered without explicit instruction): "Script Filename"
-  (`script_filename_label`) / "Enter a filename" (`filename_hint`) for
+- Persistent field labels/hints (must not be altered without explicit
+  instruction): "Script Filename" (`script_filename_label`) / "Enter a
+  filename, then press Enter or Next" (`filename_hint`) for
   `filenameField`; "Script Text" (`script_text_label`) / "Type or paste
   your script here" (`script_body_hint`) for `scriptBodyField`.
 - Validation on Save (`saveNew()`), in order: non-empty trimmed filename
@@ -329,39 +329,54 @@ bottom, exactly as it currently exists:
    `LinearLayout`. It is a direct child of the root layout, **not**
    nested inside any `ScrollView`. `imeOptions="flagNoExtractUi"`, hint
    "Type or paste your script here" (`script_body_hint`).
-4. The Cancel/Save row — a horizontal `LinearLayout`, positioned after
-   `scriptBodyField` in document order (never above it):
-   - `btnEditorCancel` — style `SecondaryControlButton` — "Cancel"
+4. `editorButtonRow` — the Cancel/Save row, a horizontal `LinearLayout`
+   with `visibility="gone"` by default, positioned after `scriptBodyField`
+   in document order (never above it):
+   - `btnEditorCancel` — style `EditorActionButton` — "Cancel"
      (`btn_cancel`).
-   - `btnEditorSave` — style `ControlButton`, with an explicit
-     `android:textSize="@dimen/secondary_text_size"` override — "Save"
-     (`btn_save`).
+   - `btnEditorSave` — style `EditorActionButton`, no per-instance
+     overrides — "Save" (`btn_save`).
 
 Confirmed facts:
 
 - `scriptBodyField` is the weighted element that receives whatever
   vertical space remains after the (possibly collapsed)
-  `titleAndFilenameSection`, the label row, and the button row are laid
-  out.
+  `titleAndFilenameSection`, the label row, and `editorButtonRow` (when
+  visible) are laid out.
 - `scriptBodyField` is not nested in a `ScrollView` anywhere in this
   hierarchy.
 - Cancel and Save appear below `scriptBodyField`, never above it.
-- Cancel and Save currently share the same text size: both resolve to
-  `@dimen/secondary_text_size` = **16sp** — Cancel inherits it from
-  `SecondaryControlButton`'s own `textSize` entry; Save gets it via the
-  explicit per-instance override on top of `ControlButton` (which still
-  supplies Save's larger `minHeight`, padding, and background — those
-  were deliberately left unchanged). Verified by resolving both
-  attributes in the compiled APK, not just by reading the XML.
+- `editorButtonRow` is hidden (`GONE`, not `INVISIBLE`, so it never
+  retains layout space) whenever `filenameField` has focus, and shown
+  whenever `scriptBodyField` has focus (compact mode) — see section 11.
+- Cancel and Save are geometrically identical, not just text-size
+  matched: both use the single shared style `EditorActionButton` with no
+  per-instance `android:textSize` (or any other) override on either
+  button. Verified by resolving the compiled style bag in the built
+  APK — `EditorActionButton`'s resolved bag (`textSize`, `textColor`,
+  `background`, `padding`, `minHeight`, `textAllCaps`) is byte-identical
+  to `SecondaryControlButton`'s, and both `btnEditorCancel` and
+  `btnEditorSave` reference that one style resource ID with nothing else
+  applied on top of it. `layout_width="0dp"` + `layout_weight="1"` on
+  both buttons gives them an equal 50/50 share of the row regardless of
+  which one carries the row's internal spacing margin (a LinearLayout
+  weight distribution detail: the margin is subtracted from the shared
+  pool before the 1:1 split, not added asymmetrically to one side).
+- `ControlButton` was **not** modified by this — `EditorActionButton` is
+  its own style (duplicated from, not aliasing, `SecondaryControlButton`)
+  so Enter Prompter and every other `ControlButton`/`SecondaryControlButton`
+  consumer elsewhere in the app is unaffected by editor-button changes,
+  and vice versa.
 - Styles live in `app/src/main/res/values/styles.xml`
   (`ControlButton`: `minHeight=@dimen/control_button_height` (64dp),
-  `textSize=@dimen/control_text_size` (20sp), `padding=12dp`; `Secondary
-  ControlButton`: `minHeight=@dimen/secondary_button_height` (56dp),
-  `textSize=@dimen/secondary_text_size` (16sp), `padding=10dp`; both have
-  `textAllCaps=false` and no `textStyle`/`fontFamily`). Dimensions live in
-  `app/src/main/res/values/dimens.xml`, including `editor_text_size`
-  (20sp, `scriptBodyField`'s own text size — unrelated to the
-  Cancel/Save mismatch that was fixed).
+  `textSize=@dimen/control_text_size` (20sp), `padding=12dp`;
+  `SecondaryControlButton` and `EditorActionButton`, identical to each
+  other: `minHeight=@dimen/secondary_button_height` (56dp),
+  `textSize=@dimen/secondary_text_size` (16sp), `padding=10dp`; all three
+  styles have `textAllCaps=false` and no `textStyle`/`fontFamily`).
+  Dimensions live in `app/src/main/res/values/dimens.xml`, including
+  `editor_text_size` (20sp, `scriptBodyField`'s own text size — unrelated
+  to the editor-button styling above).
 
 ## 11. Script Editor keyboard and compact-mode behavior
 
@@ -393,21 +408,39 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   has no `imeOptions` action set (only the `flagNoExtractUi` flag), which
   is what lets ordinary Enter presses continue to insert newlines while
   typing the script body.
+- Filename-focused visibility: `filenameField.setOnFocusChangeListener(...)`
+  calls `showFilenameSection()` whenever the field gains focus.
+  `showFilenameSection()` sets `compactMode = false`, makes
+  `titleAndFilenameSection` `VISIBLE`, and hides both `editorButtonRow`
+  and `btnEditFilename` (`GONE`). Because a disabled `EditText` cannot
+  take focus, this listener never fires in `EDITOR_MODE_EDIT_EXISTING`
+  (where `filenameField` is disabled), so `editorButtonRow` there is
+  controlled purely by compact mode below.
 - Compact mode: `scriptBodyField.setOnFocusChangeListener(...)` calls
   `enterCompactMode()` whenever the body gains focus. `enterCompactMode()`
-  sets `titleAndFilenameSection` to `GONE` and, only in
-  `EDITOR_MODE_CREATE_NEW`, makes `btnEditFilename` `VISIBLE`. It is
-  idempotent (`compactMode` boolean guard).
+  sets `titleAndFilenameSection` to `GONE`, makes `editorButtonRow`
+  `VISIBLE`, and, only in `EDITOR_MODE_CREATE_NEW`, makes
+  `btnEditFilename` `VISIBLE`. It is idempotent (`compactMode` boolean
+  guard). `editorButtonRow` is `GONE` (not `INVISIBLE`) by default in the
+  XML, so it never occupies layout space while hidden.
 - Title and filename section collapsing when the body gains focus: as
   above — this is the entire mechanism; there is no separate "shrink"
   animation or measurement step beyond the `GONE` visibility change plus
   `scriptBodyField`'s own `layout_weight` claiming the freed space.
+- CREATE_NEW's very first focus: `applyInitialFocusAndCompactState()`
+  explicitly calls `filenameField.requestFocus()` when there is no
+  `savedInstanceState` and the mode isn't EDIT_EXISTING, so
+  `showFilenameSection()` reliably fires before the first frame is
+  shown — `editorButtonRow` starts hidden deterministically rather than
+  by relying on Android's implicit "focus the first focusable view"
+  behavior.
 - "Edit Filename" behavior in `EDITOR_MODE_CREATE_NEW`: tapping
   `btnEditFilename` calls `exitCompactModeForFilenameEdit()`, which
-  restores `titleAndFilenameSection`, hides `btnEditFilename` again,
-  refocuses `filenameField` with the cursor at the end of its existing
-  text, and calls `showKeyboardFor()`/`ensureVisibleAboveKeyboard()`. It
-  does not clear or alter either field's text and does not save.
+  calls `filenameField.requestFocus()` (triggering `showFilenameSection()`
+  as a side effect, the same way focusing `scriptBodyField` triggers
+  `enterCompactMode()` as a side effect), moves the cursor to the end of
+  the existing filename text, and calls `showKeyboardFor()`. It does not
+  clear or alter either field's text and does not save.
 - "Edit Filename" absence in `EDITOR_MODE_EDIT_EXISTING`:
   `enterCompactMode()` only shows `btnEditFilename` when `editorMode ==
   EDITOR_MODE_CREATE_NEW`; in EDIT_EXISTING it is left `GONE` for the
@@ -429,11 +462,14 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   `exitCompactModeForFilenameEdit()`, so the keyboard staying open across
   a focus hand-off between the two `EditText`s does not rely solely on
   implicit platform behavior.
-- Keyboard-related limitations requiring hardware testing: the actual
-  visual/behavioral result of compact mode, the "Edit Filename" control,
-  the raw-`KEYCODE_ENTER` fallback, and `requestRectangleOnScreen()` on
-  real hardware has not been confirmed since this mechanism was added —
-  see section 25.
+- Keyboard-related limitations requiring hardware testing: the prior
+  version of compact mode (title/filename collapse, Edit Filename, the
+  raw-`KEYCODE_ENTER` fallback) was physically tested on the Lenovo Smart
+  Tab M8 and found fundamentally working, which is how the
+  `editorButtonRow`-hiding and identical-button-size refinements
+  described above came to be requested. Those specific refinements
+  themselves have not yet been separately re-confirmed on hardware since
+  being implemented — see section 25.
 
 ## 12. Script Editor state and safety
 
@@ -829,12 +865,24 @@ Reported by the user, based on running built APKs on that device:
   landscape in the Script Editor was confirmed to compress
   `scriptBodyField` to zero usable height, motivating the compact-mode
   work described in section 11.
+- After the compact-editing-mode fix, the user physically tested it and
+  found it fundamentally working (title/filename collapse, "Edit
+  Filename", and the raw `KEYCODE_ENTER` fallback all functioned), but
+  reported four remaining issues: Save appeared physically larger than
+  Cancel despite matching text size; Cancel/Save stayed visible above the
+  keyboard while typing a filename; showing Save before the script body
+  had focus was confusing; and the filename hint didn't explain the
+  Enter/Next behavior. All four are what the `editorButtonRow`
+  visibility toggling, the shared `EditorActionButton` style, and the
+  updated `filename_hint` string (sections 10–11) were built to address.
 
-**Not yet confirmed on hardware**: the compact-editing-mode mechanism
-itself (title/filename collapse, "Edit Filename" control, the raw
-`KEYCODE_ENTER` fallback, `requestRectangleOnScreen()`'s actual visual
-effect) has not been reported as tested since it was added. Treat it as
-implemented-and-compiling, not as hardware-verified.
+**Not yet confirmed on hardware**: the specific refinements built in
+response to the four issues above (`editorButtonRow` hiding while
+`filenameField` has focus, the two buttons' now-identical geometry via
+`EditorActionButton`, and the updated filename hint) have not been
+separately re-tested on the Lenovo since being implemented. Treat them as
+implemented-and-compiled — including compiled-APK-verified for the
+button geometry and hint text specifically — not as hardware-reverified.
 
 ### Acer Iconia Tab A500
 
