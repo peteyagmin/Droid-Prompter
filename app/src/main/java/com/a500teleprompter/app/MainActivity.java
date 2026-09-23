@@ -10,6 +10,7 @@ import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.util.TypedValue;
 import android.view.GestureDetector;
 import android.view.Gravity;
@@ -85,7 +86,26 @@ public class MainActivity extends Activity {
     private static final int MIN_SPEED = 1;
     private static final int MAX_SPEED = 20;
     private static final int DEFAULT_SPEED = 5;
-    private static final long SCROLL_INTERVAL_MS = 50;
+
+    /**
+     * Target scroll-tick interval, ~60 updates/second -- the actual gap
+     * between ticks is never assumed to equal this exactly (a Handler
+     * makes no such guarantee); it only sets how often movement is
+     * recalculated. See performScrollTick()/performPreviewScrollTick(),
+     * which measure real elapsed time via SystemClock.uptimeMillis() and
+     * are correct regardless of how closely ticks track this target.
+     */
+    private static final long SCROLL_INTERVAL_MS = 16;
+
+    /**
+     * Preserves the pre-existing nominal scroll rate: the old tick-based
+     * formula moved (scrollSpeed * 0.5) dp per assumed-50ms tick, i.e.
+     * scrollSpeed * 0.5 * (1000 / 50) = scrollSpeed * 10 dp/second. This
+     * constant is that same dp/second-per-Speed-unit figure, now driving
+     * an elapsed-time-based calculation instead of a fixed per-tick
+     * distance -- see computeScrollPixelsPerSecond().
+     */
+    private static final float SCROLL_DP_PER_SECOND_PER_SPEED_UNIT = 10f;
 
     private static final int COUNTDOWN_START_VALUE = 5;
     private static final long COUNTDOWN_INTERVAL_MS = 1000;
@@ -137,6 +157,18 @@ public class MainActivity extends Activity {
     private boolean prompterOrientationVertical = false;
     private boolean loadLastScriptOnLaunch = true;
     private PendingTransition pendingTransition = PendingTransition.NONE;
+
+    /**
+     * Separate fractional-pixel carry and elapsed-time baseline per
+     * scrolling context (control-screen Preview vs. full-screen Prompter),
+     * since the two can be active at different times with completely
+     * independent histories -- see computeScrollPixelsPerSecond(),
+     * performScrollTick(), performPreviewScrollTick().
+     */
+    private float fullScreenScrollRemainderPx = 0f;
+    private long fullScreenScrollLastTickUptimeMs;
+    private float previewScrollRemainderPx = 0f;
+    private long previewScrollLastTickUptimeMs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -1032,10 +1064,22 @@ public class MainActivity extends Activity {
         refreshStateVisibility();
     }
 
+    /**
+     * The sole entry point into SCROLLING, reached after every countdown
+     * regardless of origin (CountdownOrigin.INITIAL_START or RESUME) --
+     * so resetting the full-screen timing baseline and fractional-pixel
+     * accumulator here, unconditionally, covers both a brand-new run and
+     * Resume alike: the countdown's own elapsed time is never counted as
+     * scrolling time, and Resume's paused scrollView position (untouched
+     * by anything above) is picked up smoothly from here rather than
+     * jumping, since only the baseline resets, never the position.
+     */
     private void beginActiveScrolling() {
         scrollHandler.removeCallbacksAndMessages(null);
         uiState = UiState.SCROLLING;
         refreshStateVisibility();
+        fullScreenScrollRemainderPx = 0f;
+        fullScreenScrollLastTickUptimeMs = SystemClock.uptimeMillis();
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
 
@@ -1116,22 +1160,41 @@ public class MainActivity extends Activity {
         refreshStateVisibility();
     }
 
+    /**
+     * Elapsed-time-driven tick: intended movement is always (pixels per
+     * second) * (actual milliseconds since the last tick), never a fixed
+     * per-tick distance, so drift in when the Handler actually fires
+     * never changes the real-world scroll rate. Only whole pixels are
+     * ever applied to the ScrollView; the leftover fraction stays in
+     * fullScreenScrollRemainderPx for the next tick, so slow-speed
+     * sub-pixel movement accumulates smoothly instead of being discarded
+     * (the old Math.round()-per-tick behavior) or forced up to a full
+     * pixel every tick (the old Math.max(1, ...) floor).
+     */
     private void performScrollTick() {
         if (uiState != UiState.SCROLLING) {
             return;
         }
+        long now = SystemClock.uptimeMillis();
+        long elapsedMs = now - fullScreenScrollLastTickUptimeMs;
+        fullScreenScrollLastTickUptimeMs = now;
         int maxScroll = scriptText.getHeight() - scrollView.getHeight();
         if (maxScroll <= 0) {
             stopScrollingAtEnd();
             return;
         }
-        int newY = scrollView.getScrollY() + computeScrollPixelsPerTick();
-        if (newY >= maxScroll) {
-            scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
-            stopScrollingAtEnd();
-            return;
+        fullScreenScrollRemainderPx += computeScrollPixelsPerSecond() * elapsedMs / 1000f;
+        int wholePixels = (int) fullScreenScrollRemainderPx;
+        if (wholePixels > 0) {
+            fullScreenScrollRemainderPx -= wholePixels;
+            int newY = scrollView.getScrollY() + wholePixels;
+            if (newY >= maxScroll) {
+                scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
+                stopScrollingAtEnd();
+                return;
+            }
+            scrollView.scrollTo(scrollView.getScrollX(), newY);
         }
-        scrollView.scrollTo(scrollView.getScrollX(), newY);
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
 
@@ -1195,6 +1258,15 @@ public class MainActivity extends Activity {
      * previewScrollRunnable is posted on the same shared scrollHandler used
      * everywhere else, so every existing removeCallbacksAndMessages(null)
      * cleanup call also cancels a pending preview tick for free.
+     *
+     * Every press (while stopped) starts over from the very top, exactly
+     * like Start Prompter's own reset-to-top -- otherwise, on a short
+     * script already scrolled to its end, pressing Preview again after
+     * changing Speed appeared to do nothing, since the ScrollView was
+     * already sitting at its maximum position. previewScrolling is set
+     * true synchronously (not inside the deferred Runnable below), so a
+     * second rapid press is rejected by the guard above rather than
+     * queuing a duplicate start.
      */
     private void startPreviewScrolling() {
         if (uiState != UiState.CONTROLS || previewScrolling) {
@@ -1204,11 +1276,29 @@ public class MainActivity extends Activity {
             Toast.makeText(this, R.string.no_script_loaded, Toast.LENGTH_SHORT).show();
             return;
         }
+        scrollHandler.removeCallbacks(previewScrollRunnable);
+        atScriptEnd = false;
+        int minimalPaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        applyScriptPadding(minimalPaddingPx, minimalPaddingPx);
         previewScrolling = true;
         scriptText.setKeepScreenOn(true);
         updatePreviewButtonLabel();
-        scrollHandler.removeCallbacks(previewScrollRunnable);
-        scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+        // Deferred so scrollTo(0, 0) below runs after any padding-driven
+        // layout change above has settled; re-checks previewScrolling/
+        // uiState in case Stop (or anything else) ran in the meantime --
+        // same defense-in-depth pattern as showEndOfScriptMenu().
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (!previewScrolling || uiState != UiState.CONTROLS) {
+                    return;
+                }
+                scrollView.scrollTo(0, 0);
+                previewScrollRemainderPx = 0f;
+                previewScrollLastTickUptimeMs = SystemClock.uptimeMillis();
+                scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+            }
+        });
     }
 
     /**
@@ -1229,23 +1319,39 @@ public class MainActivity extends Activity {
         updatePreviewButtonLabel();
     }
 
+    /**
+     * Elapsed-time-driven, exactly like performScrollTick() -- see that
+     * method's doc comment -- but with its own independent
+     * previewScrollRemainderPx/previewScrollLastTickUptimeMs, so Preview
+     * and full-screen scrolling can never interfere with each other's
+     * accumulated sub-pixel state even though both share scrollHandler
+     * and SCROLL_INTERVAL_MS.
+     */
     private void performPreviewScrollTick() {
         if (!previewScrolling || uiState != UiState.CONTROLS) {
             previewScrolling = false;
             return;
         }
+        long now = SystemClock.uptimeMillis();
+        long elapsedMs = now - previewScrollLastTickUptimeMs;
+        previewScrollLastTickUptimeMs = now;
         int maxScroll = scriptText.getHeight() - scrollView.getHeight();
         if (maxScroll <= 0) {
             stopPreviewScrolling();
             return;
         }
-        int newY = scrollView.getScrollY() + computeScrollPixelsPerTick();
-        if (newY >= maxScroll) {
-            scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
-            stopPreviewScrolling();
-            return;
+        previewScrollRemainderPx += computeScrollPixelsPerSecond() * elapsedMs / 1000f;
+        int wholePixels = (int) previewScrollRemainderPx;
+        if (wholePixels > 0) {
+            previewScrollRemainderPx -= wholePixels;
+            int newY = scrollView.getScrollY() + wholePixels;
+            if (newY >= maxScroll) {
+                scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
+                stopPreviewScrolling();
+                return;
+            }
+            scrollView.scrollTo(scrollView.getScrollX(), newY);
         }
-        scrollView.scrollTo(scrollView.getScrollX(), newY);
         scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
     }
 
@@ -1288,11 +1394,16 @@ public class MainActivity extends Activity {
         scriptText.setKeepScreenOn(uiState != UiState.CONTROLS);
     }
 
-    private int computeScrollPixelsPerTick() {
+    /**
+     * The current Speed setting's rate in pixels per second, shared by
+     * Preview and full-screen Prompter scrolling alike -- both must use
+     * the same selected Speed, and both read this fresh on every tick, so
+     * a live Speed change (e.g. dragging the SeekBar during Preview)
+     * takes effect on the very next tick with no restart needed.
+     */
+    private float computeScrollPixelsPerSecond() {
         float density = getResources().getDisplayMetrics().density;
-        float dpPerTick = scrollSpeed * 0.5f;
-        int px = Math.round(dpPerTick * density);
-        return Math.max(1, px);
+        return scrollSpeed * SCROLL_DP_PER_SECOND_PER_SPEED_UNIT * density;
     }
 
     private void changeFontSize(float deltaSp) {

@@ -3,17 +3,18 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `5c3e010`** (branch
-`claude/android-teleprompter-app-1wfqsr`, which added the Settings
-screen described in section 30), updated for two focused visual
-refinements to the adjustment row on top of it: replacing the Settings
-gear artwork with a clearer, user-supplied outlined gear (a visible
-center hole, section 30), and fixing the Font Size group's layout
-weighting so the first divider no longer sits behind a large blank gap
-after `A+` (section 30). The commit that lands this update is
-necessarily newer than `5c3e010`; that commit's hash is reported
-separately at the end of the task that made these changes, not inferred
-here.
+**Documented as of commit `98730fe`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for two focused
+scrolling refinements on top of it: every Preview press now starts from
+the top of the script regardless of where a previous run stopped
+(section 14), and both Preview and full-screen Prompter scrolling
+(section 19) now use an elapsed-time, fractional-pixel-accumulating
+model (section 34) in place of the old fixed-distance-per-tick one, to
+fix visible choppiness at slow Speed settings without changing any
+Speed setting's approximate real-world rate. The commit that lands this
+update is necessarily newer than `98730fe`; that commit's hash is
+reported separately at the end of the task that made these changes, not
+inferred here.
 
 Throughout this document:
 
@@ -572,22 +573,42 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
   the existing `scrollHandler.removeCallbacksAndMessages(null)` cleanup
   calls (lifecycle methods, every full-screen transition) also cancel a
   pending preview tick for free.
-- Speed behavior: preview uses the same `computeScrollPixelsPerTick()`
-  and `SCROLL_INTERVAL_MS` (50ms) as full-screen scrolling — one shared
-  `scrollSpeed` value drives both.
-- Current-position behavior: preview scrolls the same `scrollView` the
-  controls-screen script preview is already showing; no separate scroll
-  position is tracked.
+- Speed behavior: preview uses the same `computeScrollPixelsPerSecond()`
+  and `SCROLL_INTERVAL_MS` as full-screen scrolling — one shared
+  `scrollSpeed` value drives both. See section 34 for the elapsed-time
+  model and its own `previewScrollRemainderPx`/
+  `previewScrollLastTickUptimeMs` accumulator/baseline pair.
+- **Every Preview press starts from the top.** `startPreviewScrolling()`
+  removes any pending preview callback, clears `atScriptEnd`, reapplies
+  the minimal control-screen padding (`applyScriptPadding`), sets
+  `previewScrolling = true` synchronously (so a second rapid press is
+  rejected by the method's own guard rather than queuing a duplicate
+  start), then defers via `scrollView.post()` to `scrollTo(0, 0)`,
+  reset the preview accumulator/baseline, and post the first tick — the
+  deferred step re-checks `previewScrolling`/`uiState` first, so a Stop
+  press landing in that brief window correctly cancels the pending
+  start instead of restarting it. This replaced the previous behavior,
+  where Preview resumed from wherever it had last stopped — on a short
+  script already at its end, pressing Preview again (e.g. after
+  changing Speed) used to appear to do nothing, since the ScrollView was
+  already sitting at `maxScroll`.
+- Current-position behavior *while running or after Stop*: preview
+  scrolls the same `scrollView` the controls-screen script preview is
+  already showing; Stop preserves exactly wherever scrolling was
+  stopped — only a fresh Preview *press* resets to the top, not Stop.
 - Controls remaining visible: yes — preview never hides `controlsPanel`
   (it only runs while `uiState == CONTROLS`).
 - Conditions that stop Preview: the Preview/Stop button itself
   (`togglePreviewScrolling()`), reaching the end of the script
-  (`performPreviewScrollTick()` when `maxScroll <= 0` or the tick would
-  overshoot it), and every control that defensively calls
+  (`performPreviewScrollTick()` when `maxScroll <= 0` or the next tick
+  would reach or overshoot it), and every control that defensively calls
   `stopPreviewScrolling()` — Start Prompter, New Script, Edit Script,
-  Load Script, Exit, Back-out-of-full-screen, and `onPause()`.
+  Load Script, Settings, Exit, Back-out-of-full-screen, and `onPause()`.
 - End-of-preview behavior: scrolls to exactly `maxScroll` then stops;
-  does not loop, does not return to the top automatically.
+  does not loop. Stopping at the end sets no flag that would prevent the
+  *next* Preview press from resetting to the top — the reset-to-top
+  behavior above is unconditional on every press, regardless of why
+  Preview last stopped.
 - Keep-screen-awake: `scriptText.setKeepScreenOn(true)` while preview is
   active, `false` again in `stopPreviewScrolling()`.
 
@@ -605,13 +626,18 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
 - Speed: `speedSeekBar`, range `MIN_SPEED = 1` to `MAX_SPEED = 20`
   (`SeekBar.setMax(MAX_SPEED - MIN_SPEED)`, progress offset by
   `MIN_SPEED`), `DEFAULT_SPEED = 5`.
-- Speed calculation: `computeScrollPixelsPerTick()` —
-  `dpPerTick = scrollSpeed * 0.5f`, converted to pixels via display
-  density, floored at a minimum of 1px per tick, applied every
-  `SCROLL_INTERVAL_MS` (50ms).
+- Speed calculation: `computeScrollPixelsPerSecond()` —
+  `scrollSpeed * SCROLL_DP_PER_SECOND_PER_SPEED_UNIT * density`
+  (`SCROLL_DP_PER_SECOND_PER_SPEED_UNIT = 10f`), i.e. `scrollSpeed * 10`
+  dp/second, converted to pixels via display density. This is an
+  elapsed-time rate, not a fixed per-tick distance — see section 34 for
+  the full scrolling model and why this preserves the exact pre-existing
+  nominal rate at every Speed setting.
 - How speed affects Preview and full-screen scrolling: identically —
-  both call the same `computeScrollPixelsPerTick()` off the same
-  `scrollSpeed` field.
+  both call the same `computeScrollPixelsPerSecond()` off the same
+  `scrollSpeed` field, every tick, so a live change (e.g. dragging
+  `speedSeekBar` during Preview) takes effect on the very next tick with
+  no restart.
 - Persisted via `KEY_SCROLL_SPEED` (int) in `SharedPreferences`, clamped
   to `[MIN_SPEED, MAX_SPEED]` on load.
 - There is no Speed minus/plus button pair anywhere in the source —
@@ -768,9 +794,14 @@ its own start/stop methods change `uiState`.
   `scrollHandler`; only one of the three is ever actively scheduled for
   the full-screen/countdown pair at a time (they share
   `removeCallbacksAndMessages(null)` cleanup).
-- Speed calculation: `computeScrollPixelsPerTick()` (section 15),
-  invoked every `SCROLL_INTERVAL_MS` (50ms) via `performScrollTick()`.
-- Start: `beginActiveScrolling()`, after the countdown reaches 0.
+- Speed calculation: `computeScrollPixelsPerSecond()` (section 15),
+  consulted every `SCROLL_INTERVAL_MS` via `performScrollTick()` — see
+  section 34 for the elapsed-time model.
+- Start: `beginActiveScrolling()`, after the countdown reaches 0. This is
+  the sole entry point into `SCROLLING` regardless of `CountdownOrigin`
+  (a fresh Start Prompter/Restart tap or Resume alike), and is where the
+  full-screen timing baseline and fractional-pixel accumulator are reset
+  — see section 34.
 - **Pause menu layout**: `pauseMenuOverlay` (a `LinearLayout`,
   `activity_main.xml`) is the last child of `fullScreenContainer`
   (after `scrollView`, `countdownText`, `tapInstructionText`), so it
@@ -803,8 +834,12 @@ its own start/stop methods change `uiState`.
   `performCountdownTick()`), just with `countdownOrigin` recorded as
   `RESUME`. Neither the countdown nor `beginActiveScrolling()` touches
   `scrollView`'s position, so scrolling resumes from exactly where it
-  was paused. Resume is hidden (`btnResume` `GONE`) whenever
-  `atScriptEnd` is true — see section 20.
+  was paused; `beginActiveScrolling()` *does* reset the elapsed-time
+  baseline (section 34), so the time spent paused and counting down is
+  never counted as scrolling time — without that reset, the first tick
+  after Resume would see an artificially huge elapsed gap and jump far
+  past the paused position. Resume is hidden (`btnResume` `GONE`)
+  whenever `atScriptEnd` is true — see section 20.
 - Restart: pressing **Restart** calls `restartFromPauseMenu()`, which is
   a thin guard (`uiState == PAUSED_FULLSCREEN`) around the same
   `resetToWaitingFromTop()` Start Prompter uses (section 17) — resets to
@@ -1958,6 +1993,164 @@ loaded therefore never re-evaluates or re-applies this setting, and
 never re-attempts (or skips) loading anything.
 
 **Hardware status**: requires physical testing — see section 26.
+
+## 34. Elapsed-time scrolling model and fractional-pixel accumulation
+
+Both `performScrollTick()` (full-screen) and `performPreviewScrollTick()`
+(Preview) were rewritten to compute movement from actual elapsed time
+rather than assuming a fixed distance per tick, to fix visible
+choppiness — particularly at slow Speed settings — from the previous
+tick-based model.
+
+**Previous model**: `SCROLL_INTERVAL_MS = 50` (50ms), and each tick
+moved a fixed `computeScrollPixelsPerTick()` amount —
+`Math.max(1, Math.round(scrollSpeed * 0.5f * density))`. This assumed
+every `Handler.postDelayed()` callback fired at exactly 50ms, which a
+`Handler` never guarantees; it also **discarded** any fractional pixel
+distance every single tick (`Math.round()`, with no carry-forward), and
+**floored** the per-tick distance at 1px (`Math.max(1, ...)`) whenever
+the true nominal amount was less than half a pixel — both distortions
+were most visible at slow Speed settings and on lower-density screens,
+where they produced periodic stalls (rounding away a partial pixel
+entirely) or an artificially inflated effective rate (the 1px floor
+moving more than the nominal rate called for).
+
+**Current model**: `SCROLL_INTERVAL_MS = 16` (~60 updates/second,
+matching the task's explicit target) is only a *target* poll interval —
+the actual gap between ticks is never assumed to equal it. Each tick:
+
+```java
+long now = SystemClock.uptimeMillis();
+long elapsedMs = now - <context>LastTickUptimeMs;
+<context>LastTickUptimeMs = now;
+...
+<context>RemainderPx += computeScrollPixelsPerSecond() * elapsedMs / 1000f;
+int wholePixels = (int) <context>RemainderPx;
+if (wholePixels > 0) {
+    <context>RemainderPx -= wholePixels;
+    // ... apply wholePixels to scrollView, clamped to maxScroll ...
+}
+scrollHandler.postDelayed(<runnable>, SCROLL_INTERVAL_MS);
+```
+
+`SystemClock.uptimeMillis()` — a monotonic clock that excludes deep
+sleep and is immune to wall-clock/timezone changes, available since API
+1 — measures the *real* elapsed time since the previous tick, whatever
+it actually was. Intended movement (`pixels per second × elapsed
+seconds`) accumulates into a float remainder; only the whole-pixel part
+is ever applied to the `ScrollView` (`scrollTo()`, still a single
+direct, predictable call — never `smoothScrollTo()`/`smoothScrollBy()`,
+which would stack overlapping animations across ticks), and the leftover
+fraction — always in `[0, 1)` after each tick — carries into the next
+tick rather than being discarded. This means slow-speed sub-pixel
+motion accumulates smoothly across several ticks until it crosses a
+whole pixel, instead of either stalling (old rounding) or being forced
+up to a full pixel every tick regardless of the true rate (old floor).
+No 1px-per-tick floor exists in the new model at all — it is
+unnecessary, since a slow rate simply accumulates over more ticks before
+its next whole-pixel move, rather than needing an artificial minimum.
+
+**`computeScrollPixelsPerSecond()`** (section 15): `scrollSpeed *
+SCROLL_DP_PER_SECOND_PER_SPEED_UNIT * density`, where
+`SCROLL_DP_PER_SECOND_PER_SPEED_UNIT = 10f`. This is an exact algebraic
+restatement of the old nominal rate, not a redefinition: the old formula
+moved `scrollSpeed * 0.5` dp per assumed-50ms tick, i.e. `scrollSpeed *
+0.5 * (1000 / 50) = scrollSpeed * 10` dp/second — the same dp/second
+figure this constant now names directly. Every existing Speed setting
+(1–20) therefore keeps its same approximate real-world rate; what
+changed is *how* that rate is realized frame-to-frame (continuous,
+elapsed-time-accurate, fractional-pixel-preserving), not the rate
+itself. Both Preview and full-screen scrolling call this one shared
+method every tick, off the one shared `scrollSpeed` field, so dragging
+`speedSeekBar` during an active Preview run takes effect on the very
+next tick — no restart, exactly as before.
+
+**Separate accumulators and baselines**, since Preview and full-screen
+scrolling can each be active at different times with completely
+independent histories:
+
+| Context | Accumulator | Baseline |
+| --- | --- | --- |
+| Full-screen Prompter | `fullScreenScrollRemainderPx` | `fullScreenScrollLastTickUptimeMs` |
+| Control-screen Preview | `previewScrollRemainderPx` | `previewScrollLastTickUptimeMs` |
+
+**Baseline/accumulator reset conditions** — both are reset together,
+always in pairs, only when a *new* scrolling run actually begins:
+
+- Full-screen: inside `beginActiveScrolling()`, the sole entry point
+  into `SCROLLING` reached after every countdown regardless of
+  `CountdownOrigin` — covering both a brand-new Start Prompter/Restart
+  run and a Resume run identically. This is also what keeps countdown
+  and pause time from ever being counted as scrolling time (section 19)
+  — the baseline is stamped fresh only once scrolling actually resumes,
+  never inherited from before the countdown began.
+- Preview: inside the deferred `scrollView.post()` Runnable at the end
+  of `startPreviewScrolling()` (section 14), immediately before the
+  first tick is posted — paired with the `scrollTo(0, 0)` reset that
+  refinement adds, so a fresh Preview run's very first tick measures
+  elapsed time from the moment scrolling actually starts, not from
+  whenever the previous run happened to stop.
+- Neither is reset merely because Speed changed — `speedSeekBar`'s
+  `onProgressChanged` only ever writes `scrollSpeed` and saves
+  preferences; it never touches either accumulator or baseline, so an
+  in-progress run's accumulated fractional state survives a Speed change
+  untouched, exactly as the accumulated whole-pixel position always has.
+
+**Lifecycle safety**: every existing
+`scrollHandler.removeCallbacksAndMessages(null)` /
+`scrollHandler.removeCallbacks(previewScrollRunnable)` cleanup call
+(manual pause, Stop, Restart, Back to Controls, Settings, Load/New/Edit
+Script, Exit, `onPause()`/`onStop()`/`onDestroy()`) is unchanged by this
+work — it still guarantees at most one full-screen tick and at most one
+preview tick are ever pending, and that the two can never overlap
+(section 19's "Preview/full-screen exclusivity" bullet, unchanged).
+Because a stale baseline is only ever consulted by a tick, and every
+lifecycle interruption above cancels any pending tick, a stale baseline
+can never produce a large jump on its own — the next *actual* scrolling
+run always re-stamps its baseline fresh at one of the two reset points
+above before its first tick runs. Returning from the background is
+covered the same way it always was (section 19): `onPause()`
+unconditionally routes through `exitFullScreenToControls()` unless a
+deliberate `pendingTransition` is already in flight (section 32), so the
+app can never resume mid-scroll with a stale baseline — resuming full
+prompter scrolling afterward always goes back through Start Prompter,
+which resets fresh via `beginActiveScrolling()`.
+
+**End-of-script precision preserved**: both tick methods still clamp
+the proposed new position to `maxScroll` and call
+`stopScrollingAtEnd()`/`stopPreviewScrolling()` **exactly once** — the
+`if (wholePixels > 0) { ...; if (newY >= maxScroll) { snap and stop; } }`
+structure is unchanged in shape from the old per-tick version, just
+computing `wholePixels` differently. Once either method transitions out
+of its active state (`SCROLLING`→`END_OF_SCRIPT_WAITING`, or
+`previewScrolling = false`), its own top-of-method guard prevents any
+further tick from running, so overshoot or a duplicate end-detection
+call is not possible. `OPENING_SPACE_FRACTION`, `END_SPACE_FRACTION`,
+and the final resting position (sections 21–22) are entirely untouched
+— this refinement changes only how the scroll position advances tick to
+tick, never where the maximum scroll position itself is.
+
+**Deliberately not done**: elapsed time per tick is never capped or
+smoothed. A rare long stall (e.g. a GC pause) produces one larger
+catch-up jump on the next tick rather than the scroll permanently
+falling behind real time — consistent with "do not assume every
+callback occurs exactly on schedule" and "preserve the same approximate
+real-world rate." No physics-based acceleration/deceleration, overscroll,
+or bounce was added; motion remains strictly linear and constant-speed
+at whatever rate `computeScrollPixelsPerSecond()` currently returns.
+
+**Old-hardware performance**: no new object allocation occurs per tick
+— `scrollRunnable`/`previewScrollRunnable` are the same reused `Runnable`
+instances as before, `SystemClock.uptimeMillis()` returns a primitive
+`long`, and the accumulator math uses only primitive `float`/`int`
+arithmetic. No `requestLayout()` is called from either tick method
+(`scrollTo()` alone does not trigger one). No new thread is introduced —
+both tick methods still run exclusively on the main UI thread via the
+existing `scrollHandler`.
+
+**Hardware status**: requires physical testing — see section 26. The
+perceived smoothness improvement, in particular, cannot be confirmed by
+source inspection or a successful build alone.
 
 ---
 

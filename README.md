@@ -23,10 +23,13 @@ this project is developed under, see [`CLAUDE.md`](CLAUDE.md).
   button; Restart (or Start Prompter again from the controls) is how you
   get back to the top.
 - **Preview** / **Stop** on the control screen, to test auto-scrolling at
-  the current speed without entering full-screen mode.
+  the current speed without entering full-screen mode. Every Preview
+  press always demonstrates the script from the beginning, regardless of
+  where a previous run left off.
 - Adjustable auto-scroll speed via a **Speed** `SeekBar`, with the
   current speed shown; the same speed setting drives both Preview and
-  full-screen scrolling.
+  full-screen scrolling, using smoother constant-speed movement at every
+  setting.
 - Font size **A-** / **A+** controls, with the current size shown.
 - **New Script** and **Edit Script**: a built-in full-screen plain-text
   editor for creating and revising scripts without leaving the app (see

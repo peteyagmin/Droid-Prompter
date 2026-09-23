@@ -72,6 +72,20 @@ report the discrepancy before proceeding.
 - Start Prompter (and Restart) always starts from the beginning of the
   loaded script (`scrollTo(0, 0)`, `atScriptEnd = false`), regardless of
   any prior preview or paused position.
+- Every new Preview run (each press while `previewScrolling` is false)
+  begins from the top of the script, regardless of where a previous
+  Preview run stopped — Stop itself still preserves position; only a
+  fresh Preview press resets it.
+- Automatic scrolling (Preview and full-screen alike) must remain
+  linear, constant-speed, and elapsed-time-based (`SystemClock.
+  uptimeMillis()`), preserving fractional sub-pixel movement in a
+  per-context accumulator rather than discarding it each tick. No
+  physics-based acceleration/deceleration, overscroll, or bounce.
+- Pauses, countdowns, and lifecycle interruptions (backgrounding,
+  Settings, another Activity) must reset the relevant scrolling timing
+  baseline before the next tick, so elapsed time spent outside active
+  scrolling is never counted as scrolling time and cannot produce a
+  large jump. See `PROJECT_SPEC.md` section 34.
 - Control-screen preview uses minimal, uniform top padding
   (`SCRIPT_PADDING_DP`).
 - Full-screen Prompter mode uses the existing 77.5% opening buffer
