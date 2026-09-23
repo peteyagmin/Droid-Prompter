@@ -3,18 +3,17 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `98730fe`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for two focused
-scrolling refinements on top of it: every Preview press now starts from
-the top of the script regardless of where a previous run stopped
-(section 14), and both Preview and full-screen Prompter scrolling
-(section 19) now use an elapsed-time, fractional-pixel-accumulating
-model (section 34) in place of the old fixed-distance-per-tick one, to
-fix visible choppiness at slow Speed settings without changing any
-Speed setting's approximate real-world rate. The commit that lands this
-update is necessarily newer than `98730fe`; that commit's hash is
-reported separately at the end of the task that made these changes, not
-inferred here.
+**Documented as of commit `8132609`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for one focused
+visual refinement on top of it: `btnOpenFile`, `btnNewScript`,
+`btnEditScript`, and `btnStart` now all use `@style/SecondaryControlButton`
+instead of `@style/ControlButton` (section 4), matching Mirror, Exit,
+and Preview/Stop's existing 56dp/16sp sizing so every rectangular button
+on the main control screen reads as one consistent size — `ControlButton`
+itself is unchanged and untouched, still used by the full-screen
+pause-menu buttons. The commit that lands this update is necessarily
+newer than `8132609`; that commit's hash is reported separately at the
+end of the task that made these changes, not inferred here.
 
 Throughout this document:
 
@@ -133,6 +132,19 @@ inside `scrollView`, shown below the controls panel whenever
 
 No other controls exist on this screen. In particular, there is no
 "Return to Top" button and no Speed minus/plus button pair.
+
+**Button sizing**: `btnOpenFile`, `btnNewScript`, `btnEditScript`, and
+`btnStart` all use `@style/SecondaryControlButton` (56dp `minHeight`,
+16sp text, 10dp padding) — the same style as `mirrorToggle`, `btnExit`,
+and `btnPreview` — so every rectangular button on this screen shares one
+consistent physical size and typography. Start Prompter remains the
+visually dominant action purely through its wider `layout_weight="3"`
+(vs. `1` each for Mirror and Exit) and central placement, not through a
+taller button or larger text. `@style/ControlButton` (64dp `minHeight`,
+20sp text, 12dp padding) is no longer used anywhere on this screen —
+only by the full-screen pause-menu buttons, the Script Editor's Cancel/
+Save row is `EditorActionButton` instead (section 11), and the Settings/
+file-browser screens have their own unrelated buttons.
 
 ## 5. Loaded-script-dependent button states
 
@@ -380,9 +392,12 @@ Confirmed facts:
   pool before the 1:1 split, not added asymmetrically to one side).
 - `ControlButton` was **not** modified by this — `EditorActionButton` is
   its own style (duplicated from, not aliasing, `SecondaryControlButton`)
-  so Start Prompter and every other `ControlButton`/`SecondaryControlButton`
-  consumer elsewhere in the app is unaffected by editor-button changes,
-  and vice versa.
+  so the pause-menu buttons and every other `ControlButton`/
+  `SecondaryControlButton` consumer elsewhere in the app is unaffected by
+  editor-button changes, and vice versa. (Start Prompter, Load Script,
+  New Script, and Edit Script all use `SecondaryControlButton` as of the
+  main-screen button-sizing pass described in section 4 — not
+  `ControlButton`, unlike when this paragraph was first written.)
 - Styles live in `app/src/main/res/values/styles.xml`
   (`ControlButton`: `minHeight=@dimen/control_button_height` (64dp),
   `textSize=@dimen/control_text_size` (20sp), `padding=12dp`;
