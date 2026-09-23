@@ -3,17 +3,16 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `64ced0a`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated to record that the
-two full-screen Prompter refinements landed in that commit — lowering
-the final resting position of the last script line (`END_SPACE_FRACTION`
-`0.5f` → `0.4f`, section 21) and hiding the status/navigation bars
-throughout full-screen Prompter mode (section 22) — have now been
-physically confirmed on all three tracked devices, including the first
-confirmed Acer A500 test result in this project's history (section 26).
-The commit that lands this update is necessarily newer than `64ced0a`;
-that commit's hash is reported separately at the end of the task that
-made these changes, not inferred here.
+**Documented as of commit `6a82e01`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for a new Settings
+screen on top of it: a compact gear-icon control on the main screen
+(section 4, section 30) opening `SettingsActivity` with three settings —
+Text Alignment (section 31), Prompter Orientation (section 32, which can
+recreate `MainActivity` on API 14 to switch between landscape and
+portrait full-screen Prompter mode), and Load Last Script on Launch
+(section 33). The commit that lands this update is necessarily newer
+than `6a82e01`; that commit's hash is reported separately at the end of
+the task that made these changes, not inferred here.
 
 Throughout this document:
 
@@ -121,6 +120,10 @@ Font size + speed row:
   live numeric label (`speedLabel`), a `SeekBar` (`speedSeekBar`), and
   **Preview** / **Stop** (`btn_preview` / `btn_stop_preview`,
   `btnPreview`, label toggles at runtime).
+- A second vertical divider (identical width/color/margins to the
+  first — see section 30), then the compact Settings gear
+  (`btnSettings`, an `ImageButton`) — opens `SettingsActivity` (section
+  30).
 
 Script preview: the same `scriptText` view used in full-screen mode,
 inside `scrollView`, shown below the controls panel whenever
@@ -1236,9 +1239,26 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
   selected file was found in) and by
   `MainActivity.promptLoadNewlySavedScript()`'s Yes branch (the
   Teleprompter folder).
+- `KEY_TEXT_ALIGNMENT` (string; `TEXT_ALIGNMENT_LEFT` = `"left"` or
+  `TEXT_ALIGNMENT_CENTER` = `"center"`, default `TEXT_ALIGNMENT_LEFT`) —
+  see section 31. Written only by `SettingsActivity`, immediately on
+  each `RadioGroup` selection change; `MainActivity` only ever reads it.
+- `KEY_PROMPTER_ORIENTATION` (string; `PROMPTER_ORIENTATION_HORIZONTAL`
+  = `"horizontal"` or `PROMPTER_ORIENTATION_VERTICAL` = `"vertical"`,
+  default `PROMPTER_ORIENTATION_HORIZONTAL`) — see section 32. Same
+  write/read split as Text Alignment.
+- `KEY_LOAD_LAST_SCRIPT` (boolean, default `true`) — see section 33.
+  Same write/read split as the other two Settings-owned keys.
 
 `savePreferences()` uses `SharedPreferences.Editor.commit()`
-(synchronous), not `apply()`.
+(synchronous), not `apply()`; `SettingsActivity`'s three listeners each
+do the same, independently, on their own `SharedPreferences.Editor`.
+None of the three Settings-owned keys above is ever written by
+`MainActivity.savePreferences()` — `MainActivity` only reads them (via
+`loadDisplayAndStartupPreferences()`, called from `loadPreferences()` on
+create and again, on its own, every `onResume()`), so there is nothing
+for that method to reconcile for these three the way it does for font
+size/speed/mirror/last file path.
 
 ## 25. Build process
 
@@ -1280,9 +1300,8 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
 
 ### Physically tested on Lenovo Smart Tab M8
 
-Reported by the user, based on running built APKs on that device. Its
-exact Android version is not stated anywhere in this repository and is
-not inferred here.
+Reported by the user, based on running built APKs on that device. Runs
+Android 10 (API level 29).
 
 - Normal sideloading works.
 - Android displays a one-time warning on first launch that the
@@ -1319,11 +1338,14 @@ not inferred here.
 - The lowered end-of-script resting position (`END_SPACE_FRACTION =
   0.4f`, section 21) and full-screen status/navigation bar hiding
   (section 22) have both been physically tested on this device and
-  reported working as expected. This device's exact Android version is
-  still not recorded in this repository, so which of the two system-bar
-  code paths (API 14–18 legacy vs. guarded API 19+ immersive-sticky,
-  section 22) it exercised is not stated here — only that the observed
-  behavior was correct either way.
+  reported working as expected. Running API 29, this device exercises
+  the guarded API 19+ immersive-sticky system-bar code path (section
+  22), the same as the Nexus 7 below.
+
+**Awaiting physical verification on the Lenovo**: the Settings screen
+(section 30), Text Alignment (section 31), Prompter Orientation
+(section 32), and Load Last Script on Launch (section 33) have not been
+installed or tested on this device.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -1353,6 +1375,13 @@ version.
   Running API 23, this device specifically exercises the guarded API 19+
   immersive-sticky system-bar code path (section 22).
 
+**Awaiting physical verification on the Nexus 7**: same as the Lenovo
+above — the Settings screen and its three settings have not been
+installed or tested on this device. In particular, Vertical Prompter
+Orientation on this device would exercise the API 19+ immersive-sticky
+system-bar path (section 22) during the orientation-driven recreation
+(section 32) — an interaction not yet exercised on any device.
+
 ### Acer Iconia Tab A500
 
 Physically tested on an actual Acer Iconia Tab A500 as of this round —
@@ -1379,6 +1408,15 @@ smoothness on weaker hardware, the exact on-device rendering of the
 launcher icon and button-background drawables, and whether the A500's
 microSD mount path is among the legacy paths already checked (section
 6).
+
+**Awaiting physical verification on the A500**: the Settings screen and
+its three settings (sections 30–33) have not been installed or tested
+on this device. Vertical Prompter Orientation here would specifically
+exercise the API 14–18 legacy system-bar path (section 22) together with
+the orientation-recreation mechanism (section 32) — the combination this
+project can least afford to get wrong unverified, since the A500 is the
+original target hardware and the only device confirmed to run the
+legacy path at all.
 
 ### Android version warning: device- and version-dependent, not universal
 
@@ -1466,6 +1504,438 @@ release to point to):
   `PROJECT_SPEC.md` whenever product behavior changes, not just when
   asked to.
 - Keep `CLAUDE.md` concise — persistent rules only, not a history log.
+
+---
+
+## 30. Settings screen and the Settings gear icon
+
+**Main-screen placement** (`app/src/main/res/layout/activity_main.xml`,
+inside the Font Size/Speed adjustment row — section 4): the row now
+reads `Font Size | Speed and Preview | Settings`, three sections
+separated by two vertical dividers. The second divider is a plain
+decorative `View`, not referenced by `MainActivity.java`, with the exact
+same width (`@dimen/adjustment_divider_width`), color
+(`@color/divider_color`), margins (12dp horizontal, `@dimen/
+adjustment_divider_vertical_margin` vertical), `clickable="false"`, and
+`focusable="false"` as the pre-existing first divider — a deliberate
+copy, not a shared style, matching how the first divider was already
+written inline. Neither divider carries an `android:id`.
+
+`btnSettings` is an `ImageButton`, not a full-size text button: no
+visible "Settings" label appears on the main screen, only the icon.
+
+- Size: `@dimen/secondary_button_height` (56dp) square — comfortably
+  above the ~48dp minimum touch-target guideline, and matched to
+  `btnPreview`'s height (`SecondaryControlButton`, also 56dp) so the
+  gear reads as the same visual weight as Preview/Stop, not larger.
+- Background: `@drawable/button_background` — the same selector
+  (normal/pressed/disabled states) every other control button already
+  uses, so pressed-state feedback matches the rest of the app for free.
+- `android:padding="12dp"` inside the 56dp button leaves a 32dp visible
+  icon, keeping the artwork clear of the button edges.
+- `android:contentDescription="@string/settings_content_description"`
+  (string value "Settings") — sourced from `strings.xml`, never
+  hard-coded in Java or XML.
+- No `setEnabled()` call anywhere ties `btnSettings` to
+  `updateLoadedScriptDependentControls()` (unlike `btnStart`/
+  `btnEditScript`/`btnPreview`) — the gear stays enabled whether or not
+  a script is loaded, and is never touched by that method.
+- `applyMirror()` never includes `btnSettings` in its `scaleX` list, so
+  the icon is never mirrored regardless of the Mirror setting.
+
+**Gear icon artwork** (`ic_settings.png`): a plain white (`#FFFFFFFF`),
+8-tooth gear silhouette generated programmatically (Python/Pillow,
+supersampled and downsampled for anti-aliased edges), no center hole
+(a hole would blur away at these sizes), no text, high contrast against
+the app's black/dark-gray interface. A PNG, not a vector drawable — API
+14 has no `VectorDrawable` support without an AndroidX compat shim,
+which is prohibited. Provided at five density buckets, each a plain
+raster PNG at the same design (no `-v4`/adaptive-icon complexity used
+for the launcher icon):
+
+| Folder | Size |
+| --- | --- |
+| `drawable-mdpi/ic_settings.png` | 32×32 |
+| `drawable-hdpi/ic_settings.png` | 48×48 |
+| `drawable-xhdpi/ic_settings.png` | 64×64 |
+| `drawable-xxhdpi/ic_settings.png` | 96×96 |
+| `drawable-xxxhdpi/ic_settings.png` | 128×128 |
+
+The existing launcher icon (`mipmap-*/ic_launcher.png`,
+`mipmap-anydpi-v26/ic_launcher.xml`,
+`drawable-nodpi/ic_launcher_foreground.png`) is untouched by this work.
+
+**Tap behavior** (`btnSettings`'s `OnClickListener`, only ever reachable
+while `uiState == CONTROLS` since it lives on `controlsPanel`):
+
+1. `stopPreviewScrolling()` — stops Preview if running, removes the
+   pending preview callback, clears `previewScrolling`, and restores the
+   Preview/Stop button label. This is the same centralized method every
+   other control that must not leave Preview running underneath it
+   already calls (New Script, Edit Script, Load Script, Start Prompter,
+   Exit) — Settings was simply added to that existing list, not given
+   its own bespoke stop logic.
+2. `startActivity(new Intent(MainActivity.this, SettingsActivity.class))`
+   — a plain, non-`ForResult` launch. `MainActivity` never needs a
+   result code from `SettingsActivity`: every setting saves to
+   `SharedPreferences` immediately (see section 31–33), and `onResume()`
+   already rereads all three on every return from any child Activity
+   (see section 32's orientation discussion for why `onResume()`, not a
+   dedicated `onActivityResult()` case, is the single reread point).
+
+Nothing else changes: the loaded script, filename, scroll position,
+font size, speed, mirror state, and `uiState` are all left exactly as
+they were. `uiState` never leaves `CONTROLS` for this flow.
+
+**`SettingsActivity`** (`app/src/main/java/com/a500teleprompter/app/
+SettingsActivity.java`, layout `app/src/main/res/layout/
+activity_settings.xml`): a plain `Activity`, declared
+`android:screenOrientation="landscape"` in `AndroidManifest.xml` (like
+`FileBrowserActivity`/`ScriptEditorActivity`), using the Application's
+`@style/AppTheme` unchanged — normal Android status and navigation bars
+throughout, since it never calls `enterPrompterSystemUi()` or any other
+system-UI-hiding code. Structure, top to bottom:
+
+- A "Settings" heading (`settings_title`, 28sp bold, white).
+- **Text Alignment** section (section 31): an amber section label, then
+  a horizontal `RadioGroup` (`textAlignmentGroup`) with two
+  `RadioButton`s, `radioAlignLeft` ("Left") and `radioAlignCenter`
+  ("Centered").
+- A thin decorative divider (`divider_color`, 20dp top/bottom margin).
+- **Prompter Orientation** section (section 32): the same section-label
+  style, then `RadioGroup` `prompterOrientationGroup` with
+  `radioOrientationHorizontal` ("Horizontal") and
+  `radioOrientationVertical` ("Vertical").
+- Another divider.
+- **Load Last Script on Launch** (section 33): a single `CheckBox`
+  (`loadLastScriptCheckBox`), not a `RadioGroup` — simplest correct
+  control for a plain on/off setting, per the task's own "CheckBox,
+  toggle, or another clear control" allowance. `android.widget.Switch`
+  was not used at all (never even considered a fallback need), avoiding
+  the task's flagged API 14 appearance/compatibility risk entirely.
+- All of the above sits inside a `ScrollView` (the footer button is
+  outside it, always visible) as a defensive measure for narrower
+  screens/higher font-scale settings — the three sections comfortably
+  fit without scrolling on every device tested, but nothing breaks if
+  they ever don't.
+- A footer row below a full-width divider: a single **Done** button
+  (`btnSettingsDone`, `@style/ControlButton`), centered, `finish()`es
+  the Activity on click.
+
+**Save-immediately behavior**: each control's own listener
+(`RadioGroup.OnCheckedChangeListener` ×2,
+`CompoundButton.OnCheckedChangeListener` ×1) writes straight to
+`SharedPreferences` via `commit()` (synchronous, matching
+`MainActivity.savePreferences()`'s existing convention) the instant the
+selection changes — there is no separate "Save" action and therefore no
+unsaved-changes state to protect. Android Back uses the platform's
+default `Activity.onBackPressed()` behavior (not overridden) to finish
+the Activity, which is safe for exactly the same reason: nothing is
+ever buffered in memory waiting to be saved.
+
+**Hardware status**: implemented and confirmed only by source inspection
+and a successful build — see section 26 for what has and has not been
+run on real hardware; nothing about the Settings screen itself has been
+physically tested as of this writing.
+
+## 31. Text Alignment
+
+Setting key `KEY_TEXT_ALIGNMENT`, values `TEXT_ALIGNMENT_LEFT` (default)
+or `TEXT_ALIGNMENT_CENTER` (section 24, section 30). Applied by a single
+centralized method, `MainActivity.applyTextAlignment()`:
+
+```java
+private void applyTextAlignment() {
+    int gravity = AppConstants.TEXT_ALIGNMENT_CENTER.equals(textAlignment)
+            ? Gravity.CENTER_HORIZONTAL : Gravity.LEFT;
+    scriptText.setGravity(gravity);
+}
+```
+
+`Gravity.LEFT`, not `Gravity.START` — both have existed since API 1, but
+`LEFT` is what the task explicitly asked for and avoids any ambiguity
+with locale-aware start/end semantics this app has no other use for.
+
+**Scope**: `scriptText` is the one `TextView` shared by the
+control-screen preview and every full-screen Prompter state (`WAITING_
+FOR_TAP` through `END_OF_SCRIPT_WAITING`) — there is no duplicate script
+view, so setting its gravity once covers the preview and all five
+full-screen states in one call. `applyTextAlignment()` touches nothing
+but `scriptText`'s gravity: no padding, no scroll position, no script
+content, no scrolling/countdown state. It is therefore safe to call
+unconditionally from both `onCreate()` (right after `loadPreferences()`,
+alongside `applyFontSize()`/`applyMirror()`) and every `onResume()`
+(alongside the reread described in section 30), regardless of `uiState`
+at the time.
+
+Tap to Start, the countdown, the pause-menu and end-of-script-menu
+buttons, the main controls, the filename display, the file browser, and
+the Script Editor are never touched by this method — they use entirely
+separate views, so Text Alignment cannot reach them by construction, not
+by an extra exclusion check.
+
+**Interaction with Mirror**: `applyMirror()` sets `scaleX` on
+`scriptText`/`countdownText`/`tapInstructionText`; `applyTextAlignment()`
+sets `scriptText`'s `gravity`. These are orthogonal View properties —
+mirroring flips whatever is rendered, including centered text, with no
+special-casing needed for either to work correctly with the other.
+
+**Why alignment changes never disturb scrolling**: `Gravity` only
+affects how each line's content is positioned *within* its own width
+inside a `TextView` whose own `layout_width` is `match_parent` — it does
+not change `scriptText`'s measured height, so it cannot move `maxScroll`,
+does not trigger a `requestLayout()` that would invalidate an in-flight
+scroll position, and needs no scroll-clamping logic of its own (unlike
+padding or font-size changes, which do change height and are handled by
+their own dedicated methods elsewhere in this document).
+
+**Hardware status**: requires physical testing — see section 26.
+
+## 32. Prompter Orientation (Horizontal/Vertical)
+
+Setting key `KEY_PROMPTER_ORIENTATION`, values
+`PROMPTER_ORIENTATION_HORIZONTAL` (default) or
+`PROMPTER_ORIENTATION_VERTICAL` (section 24, section 30). Applies **only**
+to full-screen Prompter mode (`WAITING_FOR_TAP` through
+`END_OF_SCRIPT_WAITING`) — `CONTROLS`, `FileBrowserActivity`,
+`ScriptEditorActivity`, and `SettingsActivity` are always landscape,
+never following the setting or the physical accelerometer (every
+`screenOrientation` in play throughout this app is one of `landscape`/
+`portrait`, explicitly requested — never `sensor`/`unspecified` — so
+physically rotating the tablet never changes what's on screen on its
+own).
+
+### Why this can recreate `MainActivity`
+
+`MainActivity`'s `android:configChanges` in `AndroidManifest.xml`
+remains `"keyboardHidden"` only — deliberately not extended with
+`orientation|screenSize`. That means calling
+`Activity.setRequestedOrientation()` to a value that actually differs
+from the current configuration destroys and recreates the Activity (the
+standard, undeclared-config-change Android behavior), rather than
+MainActivity handling the change itself via `onConfigurationChanged()`.
+This is intentional, not an oversight: it lets the rest of the app's
+existing `onCreate()`/`onSaveInstanceState()`/`savedInstanceState`
+machinery (already relied on for process-death recovery) double as the
+orientation-recreation recovery path, with one addition
+(`pendingTransition`, below) layered on top, rather than building a
+second, parallel state-preservation mechanism via
+`onConfigurationChanged()`.
+
+### The two orientation-transition points
+
+Exactly two methods ever call `setRequestedOrientation()`, and both are
+the sole funnels for their respective direction of travel (section 17,
+section 23):
+
+- **`enterFullScreenWaitingFromControls()`** (`CONTROLS` →
+  `WAITING_FOR_TAP`, i.e. Start Prompter) requests
+  `ActivityInfo.SCREEN_ORIENTATION_PORTRAIT` if
+  `prompterOrientationVertical` is true, or `SCREEN_ORIENTATION_
+  LANDSCAPE` otherwise.
+- **`exitFullScreenToControls()`** (any full-screen state → `CONTROLS`)
+  always requests `SCREEN_ORIENTATION_LANDSCAPE`, regardless of the
+  setting — the main controls must always be landscape.
+
+`restartFromPauseMenu()` (Restart) calls `resetToWaitingFromTop()`
+directly, bypassing both of the above — it runs from `PAUSED_FULLSCREEN`,
+already in whichever orientation the current Prompter session is using,
+so no orientation change (and no recreation risk) is ever involved.
+`resetToWaitingFromTop()` itself needed **no changes at all** for
+Vertical mode: it already measures `scrollView.getHeight()` freshly on
+every call (section 21, section 22), so it automatically picks up
+whatever the current orientation's viewport actually is.
+
+### `PendingTransition` and the recreation-survival mechanism
+
+A new three-value enum field, `pendingTransition` (`NONE` /
+`ENTER_PROMPTER` / `EXIT_TO_CONTROLS`), is `MainActivity`'s only new
+piece of state for this feature, persisted via `onSaveInstanceState()`
+(as an `int` ordinal, key `STATE_PENDING_TRANSITION`) and restored in
+`onCreate()`. Both transition points follow the same pattern:
+
+1. Check whether the target orientation already matches
+   `getResources().getConfiguration().orientation`
+   (`orientationMatches()`) — this call happens *before*
+   `setRequestedOrientation()`, capturing the pre-change state.
+2. Set `pendingTransition` to the matching value.
+3. Call `setRequestedOrientation(target)`.
+4. If the orientation already matched (no recreation will occur), call
+   the matching continuation (`continueEnterPrompter()` /
+   `continueExitToControls()`) immediately, synchronously, right there.
+   Otherwise, do nothing further — `onResume()` is guaranteed to run
+   again once the recreation (`onPause→onSaveInstanceState→onStop→
+   onDestroy→onCreate→onStart→onResume`) completes, and checks
+   `pendingTransition` as its first order of business.
+
+`onResume()`:
+
+```java
+loadDisplayAndStartupPreferences();
+applyTextAlignment();
+if (pendingTransition == PendingTransition.ENTER_PROMPTER) {
+    continueEnterPrompter();
+} else if (pendingTransition == PendingTransition.EXIT_TO_CONTROLS) {
+    continueExitToControls();
+} else if (uiState == UiState.CONTROLS) {
+    exitPrompterSystemUi();
+} else {
+    enterPrompterSystemUi();
+}
+```
+
+Both continuation methods reset `pendingTransition` to `NONE` as their
+first line, so a transition is consumed exactly once no matter which of
+the two paths (synchronous or recreation-driven) triggers it — this is
+the mechanism that satisfies "avoid orientation loops among `onCreate()`/
+`onResume()`/`setRequestedOrientation()`."
+
+`continueEnterPrompter()` also explicitly resets `pendingRestoreScrollY`
+to `-1` before calling `resetToWaitingFromTop()`: any scroll position
+saved from the CONTROLS preview (via the pre-existing
+`STATE_SCROLL_Y`/`pendingRestoreScrollY` mechanism) is irrelevant here,
+since Start Prompter always begins at the top regardless (section 17) —
+discarding it explicitly avoids a pointless, momentary incorrect scroll
+that `resetToWaitingFromTop()`'s own `scrollTo(0, 0)` would immediately
+overwrite anyway.
+
+`continueExitToControls()` branches on whether `pendingRestoreScrollY`
+is still `-1`:
+
+- Still `-1` (a same-instance exit — Horizontal mode, or any exit that
+  did not need a recreation): behaves exactly as before this feature,
+  calling `switchScriptPaddingPreservingPosition()` (section 21), whose
+  in-memory scroll-delta math is valid because nothing was destroyed.
+- `>= 0` (a recreation-driven exit — Vertical mode): that in-memory math
+  has nothing valid to measure from (the fresh `scrollView` starts at
+  `scrollY == 0`), so it applies minimal padding directly via
+  `applyScriptPadding()` instead, and leaves the actual scroll
+  restoration to the pre-existing, `savedInstanceState`-driven
+  `pendingRestoreScrollY` block later in the same `onResume()` call,
+  which scrolls to the exact saved position once the padding change (and
+  the now-landscape layout) has settled.
+
+### Avoiding a main-controls flash during Vertical entry
+
+`onCreate()`, when `savedInstanceState != null` and the restored
+`pendingTransition != NONE`, calls `controlsPanel.setVisibility(View.
+GONE)` immediately — before `setContentView()`'s default-visible
+`controlsPanel` could ever actually be drawn to the screen. This covers
+both directions (entering Vertical mode should never flash the landscape
+controls in portrait; returning to controls should not flash them before
+system bars are restored) with one line, since a fresh layout inflation
+already defaults every other full-screen-only view (`countdownText`,
+`tapInstructionText`, `pauseMenuOverlay`) to `visibility="gone"` in the
+XML itself.
+
+One residual, acknowledged imperfection: for the few frames between a
+recreation completing and its continuation actually running (in
+`onResume()`), the system status/navigation bars briefly show their
+normal (non-hidden) state, since a fresh `Window` does not inherit the
+previous instance's `setSystemUiVisibility()` flags. This is an inherent
+consequence of Activity recreation on API 14 without `configChanges`
+suppression, not something practically avoidable within this
+architecture — noted here rather than glossed over.
+
+### Reachability of other Activities from Vertical mode
+
+`FileBrowserActivity`, `ScriptEditorActivity`, and `SettingsActivity` are
+only ever launched from buttons on `controlsPanel`, which is only ever
+visible while `uiState == CONTROLS` — and `CONTROLS` is always landscape
+regardless of the Prompter Orientation setting. There is therefore no
+path by which any of those three Activities could ever be launched while
+MainActivity is in portrait; their own `android:screenOrientation=
+"landscape"` manifest declarations are never actually put to the test
+against a portrait caller.
+
+### Known limitation
+
+The full-screen pause menu (`pauseMenuOverlay`'s three buttons, section
+19) and the end-of-script menu use the same `wrap_content`/`gravity=
+"center"` layout in both orientations — functionally correct in
+portrait, but not given a bespoke narrower-width redesign; on a
+sufficiently narrow portrait width the three `minWidth="160dp"` buttons
+could in principle crowd each other. Every device this project has
+physically tested (section 26) has ample portrait width for this to be
+a non-issue, but it has not been exercised on real hardware as of this
+writing (see below).
+
+**Hardware status**: requires physical testing — see section 26. Neither
+Horizontal (a no-op orientation-wise, but not yet retested with the
+Settings screen present at all) nor Vertical (which exercises the entire
+recreation mechanism above) has been run on a device yet.
+
+## 33. Load Last Script on Launch
+
+Setting key `KEY_LOAD_LAST_SCRIPT` (boolean, default `true` — preserves
+the app's pre-existing startup behavior for any installation that never
+opens Settings). Applied only in `onCreate()`'s fresh-launch branch
+(`savedInstanceState == null`) — the exact branch that already existed
+for "restore the last loaded script," now additionally gated on this
+preference:
+
+```java
+if (savedInstanceState != null) {
+    ... recreation-restore path, unchanged by this setting ...
+} else if (loadedFilePath != null && loadLastScriptOnLaunch) {
+    String pathToRestore = loadedFilePath;
+    loadedFilePath = null;
+    loadScriptFile(pathToRestore);
+} else {
+    loadedFilePath = null;
+    updateLoadedFileLabel();
+}
+```
+
+**On (default)**: unchanged from every prior round of this project —
+`loadScriptFile()` (with its existing `TextFileReader` validation:
+non-empty path, file exists, is a regular file, is readable, is within
+the 2 MB size limit, and decodes as UTF-8 or the ISO-8859-1 fallback)
+attempts to reload the remembered script. Success shows it normally
+(text, filename, `Start Prompter`/`Edit Script`/`Preview` enabled,
+scrolled to the top). Failure shows the existing `Toast` error and
+leaves `loadedFilePath` at `null` (it was already cleared to `null`
+before the load attempt, and `loadScriptFile()` only ever sets it back
+on success) — i.e. the no-script state, exactly matching the "handle a
+deleted/unavailable script safely" requirement, with no new code needed
+for that part.
+
+**Off**: the fresh-launch branch falls through to the new `else`,
+setting `loadedFilePath = null` **in memory only** and calling
+`updateLoadedFileLabel()`. Since `savePreferences()` only ever writes
+`KEY_LAST_FILE_PATH` when `loadedFilePath != null` (section 24, an
+existing, unchanged guard), clearing the in-memory field here never
+touches the stored preference — the remembered path, and the file
+itself, and the last-used browser directory (`KEY_LAST_DIRECTORY`), are
+all left exactly as they were. `scriptText` keeps the XML default
+placeholder text (`default_script_placeholder`, "Load a script to
+begin"), and `updateLoadedScriptDependentControls()` (called
+unconditionally right after this whole branch, as before) disables
+`btnStart`/`btnEditScript`/`btnPreview` since `loadedFilePath` is now
+`null` — `btnOpenFile`/`btnNewScript`/`btnSettings`/`mirrorToggle`/
+`btnExit` are never touched by that method and remain enabled exactly as
+they already were for the ordinary no-script state (section 5, section
+7).
+
+**Mid-session changes have no effect on the active session**: toggling
+this setting in `SettingsActivity` only ever writes the preference —
+nothing in `MainActivity` reacts to it except the fresh-launch branch
+above, so switching it Off does not unload whatever script happens to be
+active right now, and switching it back On does not reload or replace
+it either. This falls out of the architecture rather than needing an
+explicit guard: nothing but `onCreate()`'s one `savedInstanceState ==
+null` branch ever reads `loadLastScriptOnLaunch`.
+
+**Recreation is not a fresh launch**: the branch above is gated on
+`savedInstanceState == null`, the same signal this project has used
+since before this feature existed to distinguish a genuine fresh launch
+from any Activity recreation (a Vertical-orientation-triggered one,
+section 32, or any other Android-initiated one, e.g. process death and
+restore) — an orientation-driven recreation while a script is actively
+loaded therefore never re-evaluates or re-applies this setting, and
+never re-attempts (or skips) loading anything.
+
+**Hardware status**: requires physical testing — see section 26.
 
 ---
 

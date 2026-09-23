@@ -30,6 +30,18 @@
     <string name="default_script_placeholder">Load a script to begin</string>
     <string name="no_script_loaded">Load a script before starting.</string>
     <string name="no_script_to_edit">Load a script before editing.</string>
+    <string name="settings_content_description">Settings</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_text_alignment">Text Alignment</string>
+    <string name="settings_align_left">Left</string>
+    <string name="settings_align_center">Centered</string>
+    <string name="settings_section_prompter_orientation">Prompter Orientation</string>
+    <string name="settings_orientation_horizontal">Horizontal</string>
+    <string name="settings_orientation_vertical">Vertical</string>
+    <string name="settings_section_load_last_script">Load Last Script on Launch</string>
+    <string name="btn_settings_done">Done</string>
 
     <!-- Script editor -->
     <string name="script_editor_title">Script Editor</string>

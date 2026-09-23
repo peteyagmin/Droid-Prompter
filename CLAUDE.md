@@ -108,6 +108,31 @@ report the discrepancy before proceeding.
   must be measured from `scrollView.getHeight()` only after the system
   bars are hidden and that layout change has settled — hiding the bars
   changes the usable viewport height.
+- The Settings gear (`btnSettings`) sits at the far right of the Font
+  Size/Speed adjustment row, behind a second divider matching the first.
+  It must stay enabled regardless of whether a script is loaded, and
+  must never be mirrored.
+- `MainActivity`, `SettingsActivity`, `FileBrowserActivity`, and
+  `ScriptEditorActivity` all remain landscape. Prompter Orientation
+  (Horizontal/Vertical) affects only full-screen Prompter mode
+  (`WAITING_FOR_TAP` through `END_OF_SCRIPT_WAITING`), never `CONTROLS`
+  or any other Activity — never follow the physical accelerometer.
+- Vertical Prompter mode's full-screen padding must be measured only
+  after both the portrait orientation switch and the hidden-system-bar
+  layout have settled — the same "measure after settling" rule as
+  system-bar padding above, just with orientation added to what must
+  settle first. See `PendingTransition` in `PROJECT_SPEC.md` section 32
+  for the mechanism.
+- Text Alignment (`applyTextAlignment()`) touches only `scriptText`'s
+  gravity, in both the control-screen preview and every full-screen
+  Prompter state — never Tap to Start, the countdown, the pause/end
+  menus, main controls, the file browser, or the Script Editor.
+- Load Last Script on Launch only ever applies in `onCreate()`'s
+  `savedInstanceState == null` branch (a true fresh launch) — never on
+  Activity recreation, including the orientation-driven kind above.
+- Defaults: Text Alignment = Left, Prompter Orientation = Horizontal,
+  Load Last Script on Launch = On. Existing installations must keep
+  their current behavior with no new preference ever set.
 
 ## Current UI facts that must not be inferred incorrectly
 
@@ -130,6 +155,13 @@ report the discrepancy before proceeding.
   sections 17–22.
 - New Script and Edit Script are implemented (`ScriptEditorActivity`,
   `EDITOR_MODE_CREATE_NEW` / `EDITOR_MODE_EDIT_EXISTING`).
+- A Settings screen (`SettingsActivity`) is implemented, opened via the
+  main screen's gear icon (`btnSettings`), with three settings: Text
+  Alignment, Prompter Orientation, and Load Last Script on Launch (keys
+  `KEY_TEXT_ALIGNMENT`/`KEY_PROMPTER_ORIENTATION`/`KEY_LOAD_LAST_SCRIPT`
+  in `AppConstants`). Every control saves immediately; there is no
+  Settings-screen Save button, only Done. See `PROJECT_SPEC.md` sections
+  30–33.
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on
   both `EditText` fields) rather than the keyboard's fullscreen extract
   editor.

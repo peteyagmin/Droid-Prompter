@@ -217,6 +217,32 @@
                     android:minWidth="96dp"
                     android:text="@string/btn_preview" />
             </LinearLayout>
+
+            <!-- Second divider, matching the first exactly, separating
+                 Speed/Preview from the Settings gear. Decorative only;
+                 not referenced by MainActivity.java. -->
+            <View
+                android:layout_width="@dimen/adjustment_divider_width"
+                android:layout_height="match_parent"
+                android:layout_marginLeft="12dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginRight="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_marginTop="@dimen/adjustment_divider_vertical_margin"
+                android:layout_marginBottom="@dimen/adjustment_divider_vertical_margin"
+                android:background="@color/divider_color"
+                android:clickable="false"
+                android:focusable="false" />
+
+            <ImageButton
+                android:id="@+id/btnSettings"
+                android:layout_width="@dimen/secondary_button_height"
+                android:layout_height="@dimen/secondary_button_height"
+                android:background="@drawable/button_background"
+                android:scaleType="fitCenter"
+                android:padding="12dp"
+                android:src="@drawable/ic_settings"
+                android:contentDescription="@string/settings_content_description" />
         </LinearLayout>
     </LinearLayout>
 

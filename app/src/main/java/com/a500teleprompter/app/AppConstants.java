@@ -10,6 +10,16 @@ final class AppConstants {
     static final String KEY_LAST_FILE_PATH = "last_file_path";
     static final String KEY_LAST_DIRECTORY = "last_directory";
 
+    static final String KEY_TEXT_ALIGNMENT = "text_alignment";
+    static final String TEXT_ALIGNMENT_LEFT = "left";
+    static final String TEXT_ALIGNMENT_CENTER = "center";
+
+    static final String KEY_PROMPTER_ORIENTATION = "prompter_orientation";
+    static final String PROMPTER_ORIENTATION_HORIZONTAL = "horizontal";
+    static final String PROMPTER_ORIENTATION_VERTICAL = "vertical";
+
+    static final String KEY_LOAD_LAST_SCRIPT = "load_last_script_on_launch";
+
     static final String EXTRA_FILE_PATH = "com.a500teleprompter.app.EXTRA_FILE_PATH";
 
     static final String EXTRA_EDITOR_MODE = "com.a500teleprompter.app.EXTRA_EDITOR_MODE";

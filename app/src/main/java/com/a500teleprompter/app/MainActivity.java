@@ -5,15 +5,19 @@ import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.TypedValue;
 import android.view.GestureDetector;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -54,6 +58,22 @@ public class MainActivity extends Activity {
         RESUME
     }
 
+    /**
+     * Prompter Orientation (Vertical setting) can require switching
+     * MainActivity's requested orientation, which may recreate the
+     * Activity on API 14 (no orientation|screenSize in configChanges,
+     * deliberately -- see resetToWaitingFromTop()/exitFullScreenToControls()
+     * doc comments). pendingTransition records which in-flight transition
+     * (if any) survives that recreation, via onSaveInstanceState/onCreate,
+     * so onResume() can finish the transition exactly once, whether or not
+     * a recreation actually happened.
+     */
+    private enum PendingTransition {
+        NONE,
+        ENTER_PROMPTER,
+        EXIT_TO_CONTROLS
+    }
+
     private static final int REQUEST_CODE_BROWSE_FILE = 100;
     private static final int REQUEST_CODE_EDIT_SCRIPT = 200;
 
@@ -77,6 +97,7 @@ public class MainActivity extends Activity {
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
     private static final String STATE_SCROLL_Y = "state_scroll_y";
     private static final String STATE_LOADED_FILE_PATH = "state_loaded_file_path";
+    private static final String STATE_PENDING_TRANSITION = "state_pending_transition";
 
     private View controlsPanel;
     private ScrollView scrollView;
@@ -93,6 +114,7 @@ public class MainActivity extends Activity {
     private Button btnPreview;
     private Button btnStart;
     private Button btnEditScript;
+    private ImageButton btnSettings;
 
     private SharedPreferences prefs;
     private final Handler scrollHandler = new Handler();
@@ -111,6 +133,10 @@ public class MainActivity extends Activity {
     private boolean mirrorEnabled = false;
     private String loadedFilePath = null;
     private int pendingRestoreScrollY = -1;
+    private String textAlignment = AppConstants.TEXT_ALIGNMENT_LEFT;
+    private boolean prompterOrientationVertical = false;
+    private boolean loadLastScriptOnLaunch = true;
+    private PendingTransition pendingTransition = PendingTransition.NONE;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -134,6 +160,7 @@ public class MainActivity extends Activity {
         btnPreview = (Button) findViewById(R.id.btnPreview);
         btnStart = (Button) findViewById(R.id.btnStart);
         btnEditScript = (Button) findViewById(R.id.btnEditScript);
+        btnSettings = (ImageButton) findViewById(R.id.btnSettings);
 
         Button btnOpenFile = (Button) findViewById(R.id.btnOpenFile);
         Button btnNewScript = (Button) findViewById(R.id.btnNewScript);
@@ -145,6 +172,7 @@ public class MainActivity extends Activity {
 
         loadPreferences();
         applyFontSize();
+        applyTextAlignment();
         applyMirror();
         mirrorToggle.setChecked(mirrorEnabled);
 
@@ -153,6 +181,17 @@ public class MainActivity extends Activity {
         updateSpeedLabel();
 
         if (savedInstanceState != null) {
+            int pendingOrdinal = savedInstanceState.getInt(STATE_PENDING_TRANSITION,
+                    PendingTransition.NONE.ordinal());
+            pendingTransition = PendingTransition.values()[pendingOrdinal];
+            if (pendingTransition != PendingTransition.NONE) {
+                // A Vertical-orientation-triggered recreation is either
+                // mid-entry or mid-exit: hide the main controls before the
+                // very first frame draws, so the user never sees a flash of
+                // the control screen in the wrong orientation before the
+                // matching continuation (see onResume()) puts things right.
+                controlsPanel.setVisibility(View.GONE);
+            }
             CharSequence savedText = savedInstanceState.getCharSequence(STATE_SCRIPT_TEXT);
             if (savedText != null) {
                 scriptText.setText(savedText);
@@ -160,7 +199,7 @@ public class MainActivity extends Activity {
             loadedFilePath = savedInstanceState.getString(STATE_LOADED_FILE_PATH);
             pendingRestoreScrollY = savedInstanceState.getInt(STATE_SCROLL_Y, -1);
             updateLoadedFileLabel();
-        } else if (loadedFilePath != null) {
+        } else if (loadedFilePath != null && loadLastScriptOnLaunch) {
             // loadScriptFile() only re-sets loadedFilePath on success; if the
             // remembered file no longer exists or can't be read, it must not
             // be left pointing at a path whose content was never actually
@@ -168,6 +207,16 @@ public class MainActivity extends Activity {
             String pathToRestore = loadedFilePath;
             loadedFilePath = null;
             loadScriptFile(pathToRestore);
+        } else {
+            // Either no remembered script, or Load Last Script on Launch is
+            // Off: start in the "no script loaded" state without touching
+            // the stored preference -- loadPreferences() may have already
+            // populated loadedFilePath in memory from SharedPreferences, but
+            // savePreferences() never writes a null path back, so clearing
+            // it here in memory only leaves the remembered file untouched
+            // for next time (or for the setting being switched back On).
+            loadedFilePath = null;
+            updateLoadedFileLabel();
         }
         updateLoadedScriptDependentControls();
 
@@ -295,6 +344,17 @@ public class MainActivity extends Activity {
             }
         });
 
+        btnSettings.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Settings is only ever reachable while uiState == CONTROLS
+                // (the gear lives on controlsPanel), so this never touches
+                // uiState or Prompter mode -- only Preview needs stopping.
+                stopPreviewScrolling();
+                startActivity(new Intent(MainActivity.this, SettingsActivity.class));
+            }
+        });
+
         mirrorToggle.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
@@ -327,7 +387,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (uiState == UiState.CONTROLS) {
+        // MainActivity must reread Text Alignment, Prompter Orientation, and
+        // Load Last Script on Launch after returning from Settings; onResume()
+        // already runs on every return from any child Activity (and from the
+        // background), so re-reading here -- rather than wiring a dedicated
+        // result path just for Settings -- covers that requirement for free.
+        loadDisplayAndStartupPreferences();
+        applyTextAlignment();
+        if (pendingTransition == PendingTransition.ENTER_PROMPTER) {
+            continueEnterPrompter();
+        } else if (pendingTransition == PendingTransition.EXIT_TO_CONTROLS) {
+            continueExitToControls();
+        } else if (uiState == UiState.CONTROLS) {
             exitPrompterSystemUi();
         } else {
             enterPrompterSystemUi();
@@ -366,10 +437,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        // The activity is being backgrounded: always land back on the
-        // controls screen so nothing keeps counting down or scrolling
-        // while the app is not visible.
-        exitFullScreenToControls();
+        if (pendingTransition == PendingTransition.NONE) {
+            // Not part of our own deliberate orientation transition (see
+            // enterFullScreenWaitingFromControls()/exitFullScreenToControls()):
+            // this is a genuine backgrounding (Home, another app, screen
+            // off, etc.), so always land back on the controls screen so
+            // nothing keeps counting down or scrolling while the app is not
+            // visible. When pendingTransition is already set, onPause() is
+            // firing as part of a transition MainActivity itself started;
+            // skipping this call here avoids re-entering it mid-flight and
+            // clobbering pendingTransition -- the transition's own
+            // continuation (via onResume() after any recreation) finishes
+            // the job correctly on its own.
+            exitFullScreenToControls();
+        }
         savePreferences();
     }
 
@@ -424,6 +505,7 @@ public class MainActivity extends Activity {
         outState.putCharSequence(STATE_SCRIPT_TEXT, scriptText.getText());
         outState.putInt(STATE_SCROLL_Y, scrollView.getScrollY());
         outState.putString(STATE_LOADED_FILE_PATH, loadedFilePath);
+        outState.putInt(STATE_PENDING_TRANSITION, pendingTransition.ordinal());
     }
 
     @Override
@@ -519,6 +601,7 @@ public class MainActivity extends Activity {
         scrollSpeed = prefs.getInt(AppConstants.KEY_SCROLL_SPEED, DEFAULT_SPEED);
         mirrorEnabled = prefs.getBoolean(AppConstants.KEY_MIRROR, false);
         loadedFilePath = prefs.getString(AppConstants.KEY_LAST_FILE_PATH, null);
+        loadDisplayAndStartupPreferences();
 
         if (scrollSpeed < MIN_SPEED) {
             scrollSpeed = MIN_SPEED;
@@ -526,6 +609,21 @@ public class MainActivity extends Activity {
             scrollSpeed = MAX_SPEED;
         }
         fontSizeSp = clamp(fontSizeSp, MIN_FONT_SIZE_SP, MAX_FONT_SIZE_SP);
+    }
+
+    /**
+     * The three Settings-screen preferences, factored out of loadPreferences()
+     * so onResume() can reread just these -- MainActivity never writes any of
+     * the three itself (only SettingsActivity does, saving immediately on
+     * each change), so there is nothing here to reconcile with in-memory
+     * state the way font size/speed/mirror/loadedFilePath need.
+     */
+    private void loadDisplayAndStartupPreferences() {
+        textAlignment = prefs.getString(AppConstants.KEY_TEXT_ALIGNMENT, AppConstants.TEXT_ALIGNMENT_LEFT);
+        prompterOrientationVertical = AppConstants.PROMPTER_ORIENTATION_VERTICAL.equals(
+                prefs.getString(AppConstants.KEY_PROMPTER_ORIENTATION,
+                        AppConstants.PROMPTER_ORIENTATION_HORIZONTAL));
+        loadLastScriptOnLaunch = prefs.getBoolean(AppConstants.KEY_LOAD_LAST_SCRIPT, true);
     }
 
     private void savePreferences() {
@@ -696,7 +794,18 @@ public class MainActivity extends Activity {
      * position, where Preview scrolling was stopped, a paused full-screen
      * position from an earlier session, or whether the previous session
      * reached the end. Only reachable from CONTROLS; Restart reaches the
-     * same reset from PAUSED_FULLSCREEN via resetToWaitingFromTop().
+     * same reset from PAUSED_FULLSCREEN via resetToWaitingFromTop(), which
+     * needs no orientation handling of its own since PAUSED_FULLSCREEN is
+     * already in whichever orientation the Prompter is currently using.
+     *
+     * Prompter Orientation (Horizontal/Vertical) only ever applies to
+     * full-screen Prompter mode, never to CONTROLS, so this -- the sole
+     * CONTROLS-to-full-screen entry point -- is where the requested
+     * orientation is switched if Vertical is selected. Switching may
+     * recreate MainActivity on API 14 (see PendingTransition's doc
+     * comment); continueEnterPrompter() finishes the job either
+     * synchronously below (no recreation needed) or from onResume() once
+     * recreation has completed, so it runs exactly once either way.
      */
     private void enterFullScreenWaitingFromControls() {
         if (uiState != UiState.CONTROLS) {
@@ -707,7 +816,47 @@ public class MainActivity extends Activity {
             return;
         }
         stopPreviewScrolling();
+        int targetOrientation = prompterOrientationVertical
+                ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                : ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        boolean alreadyCorrect = orientationMatches(targetOrientation);
+        pendingTransition = PendingTransition.ENTER_PROMPTER;
+        setRequestedOrientation(targetOrientation);
+        if (alreadyCorrect) {
+            continueEnterPrompter();
+        }
+        // Otherwise: recreation is under way; onResume() calls
+        // continueEnterPrompter() once it completes.
+    }
+
+    /**
+     * Finishes entering the Prompter, whether called synchronously (no
+     * orientation change was needed) or from onResume() after an
+     * orientation-triggered recreation. Any saved CONTROLS-preview scroll
+     * position is irrelevant here -- Start Prompter always begins at the
+     * top -- so it is discarded rather than left for the trailing
+     * pendingRestoreScrollY block in onResume() to (harmlessly, but
+     * pointlessly) apply and then have resetToWaitingFromTop() immediately
+     * override.
+     */
+    private void continueEnterPrompter() {
+        pendingTransition = PendingTransition.NONE;
+        pendingRestoreScrollY = -1;
         resetToWaitingFromTop();
+    }
+
+    /**
+     * Whether the Activity's current actual configuration already matches
+     * the given ActivityInfo.SCREEN_ORIENTATION_* target, i.e. whether
+     * calling setRequestedOrientation(target) would be a no-op (no pause/
+     * recreate cycle) rather than actually changing anything.
+     */
+    private boolean orientationMatches(int screenOrientationConstant) {
+        int current = getResources().getConfiguration().orientation;
+        if (screenOrientationConstant == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+            return current == Configuration.ORIENTATION_PORTRAIT;
+        }
+        return current == Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /**
@@ -897,15 +1046,60 @@ public class MainActivity extends Activity {
      * canceling any pending countdown/scroll callbacks and preserving the
      * current scroll position. Safe to call when already on the controls
      * screen.
+     *
+     * The main controls must always be landscape regardless of the
+     * Prompter Orientation setting, so this -- the sole full-screen-to-
+     * CONTROLS funnel -- always requests landscape. If a Vertical session
+     * is active this may recreate MainActivity (see PendingTransition's
+     * doc comment); continueExitToControls() finishes the job either
+     * synchronously below or from onResume() once recreation completes.
      */
     private void exitFullScreenToControls() {
+        if (pendingTransition == PendingTransition.ENTER_PROMPTER) {
+            // Don't interrupt an in-flight Start Prompter orientation
+            // transition (e.g. if this is reached re-entrantly while that
+            // transition's own recreation is under way) -- its own
+            // continuation already handles landing correctly.
+            return;
+        }
         scrollHandler.removeCallbacksAndMessages(null);
         stopPreviewScrolling();
+        pendingTransition = PendingTransition.EXIT_TO_CONTROLS;
+        boolean alreadyLandscape = orientationMatches(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        if (alreadyLandscape) {
+            continueExitToControls();
+        }
+        // Otherwise: recreation is under way; onResume() calls
+        // continueExitToControls() once it completes.
+    }
+
+    /**
+     * Finishes returning to CONTROLS, whether called synchronously (no
+     * orientation change was needed, e.g. Horizontal Prompter mode) or from
+     * onResume() after an orientation-triggered recreation (Vertical mode).
+     *
+     * Same-instance exits (pendingRestoreScrollY still -1, untouched by any
+     * recreation) keep using switchScriptPaddingPreservingPosition()'s
+     * in-memory scroll-delta preservation exactly as before. A recreation-
+     * driven exit has nothing valid for that method to measure from --
+     * scrollView starts back at 0 in the fresh instance -- so it applies
+     * minimal padding directly and leaves scroll restoration to the
+     * existing savedInstanceState-driven pendingRestoreScrollY block later
+     * in onResume(), which scrolls to the exact saved position once this
+     * padding change (and the now-landscape layout) has settled.
+     */
+    private void continueExitToControls() {
+        pendingTransition = PendingTransition.NONE;
         uiState = UiState.CONTROLS;
         refreshStateVisibility();
         exitPrompterSystemUi();
         int minimalPaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        switchScriptPaddingPreservingPosition(minimalPaddingPx, minimalPaddingPx, null);
+        if (pendingRestoreScrollY >= 0) {
+            applyScriptPadding(minimalPaddingPx, minimalPaddingPx);
+        } else {
+            switchScriptPaddingPreservingPosition(minimalPaddingPx, minimalPaddingPx, null);
+        }
     }
 
     /**
@@ -1117,6 +1311,23 @@ public class MainActivity extends Activity {
         scriptText.setScaleX(scaleX);
         countdownText.setScaleX(scaleX);
         tapInstructionText.setScaleX(scaleX);
+    }
+
+    /**
+     * The single place scriptText's horizontal text alignment is set.
+     * scriptText is shared by the control-screen preview and every
+     * full-screen Prompter state, so this one call covers both -- there is
+     * no duplicate script view. Deliberately touches nothing but gravity:
+     * no padding, scroll position, script content, or scrolling state, so
+     * it is always safe to call from onCreate()/onResume() regardless of
+     * uiState. Tap to Start, the countdown, the pause/end menus, main
+     * controls, the filename display, the file browser, the Script Editor,
+     * and Settings all use their own views and are never touched here.
+     */
+    private void applyTextAlignment() {
+        int gravity = AppConstants.TEXT_ALIGNMENT_CENTER.equals(textAlignment)
+                ? Gravity.CENTER_HORIZONTAL : Gravity.LEFT;
+        scriptText.setGravity(gravity);
     }
 
     private static float clamp(float value, float min, float max) {

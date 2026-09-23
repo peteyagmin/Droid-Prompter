@@ -36,8 +36,13 @@ this project is developed under, see [`CLAUDE.md`](CLAUDE.md).
   buttons, labels, the editor, and the file browser are never mirrored.
 - Screen stays awake only while actively auto-scrolling (full-screen or
   Preview); scrolling pauses automatically when the app is backgrounded.
-- Settings (font size, scroll speed, mirror state, last file/directory)
-  persist across launches via `SharedPreferences`.
+- A compact gear icon at the far right of the Font Size/Speed row opens
+  **Settings** — Text Alignment, Prompter Orientation, and Load Last
+  Script on Launch (see Settings below). The gear stays enabled whether
+  or not a script is loaded.
+- All preferences (font size, scroll speed, mirror state, last
+  file/directory, and the three Settings-screen options below) persist
+  across launches via `SharedPreferences`.
 - A built-in file browser (no third-party file manager or Storage Access
   Framework dependency) for choosing or saving a `.txt`/`.text` script.
 
@@ -121,6 +126,32 @@ difference is the most likely place to look.
     scrolling are always independent — starting or stopping one never
     starts, stops, or otherwise affects the other, even though both use
     the same Speed setting.
+
+## Settings
+
+Tap the gear icon at the far right of the Font Size/Speed row to open
+Settings. Every choice saves immediately — there's no separate Save
+button, and Android Back or **Done** both return you to the main screen
+with your choice already applied.
+
+- **Text Alignment** — Left (default) or Centered script text, in both
+  the control-screen preview and every full-screen Prompter state.
+- **Prompter Orientation** — Horizontal (default, the app's usual
+  landscape full-screen mode) or Vertical. The main controls, file
+  browser, Script Editor, and Settings itself always stay landscape;
+  only full-screen Prompter mode switches to portrait when Vertical is
+  selected, and only once you press Start Prompter. Vertical mode is
+  useful for holding the tablet directly in front of the camera in
+  portrait, rather than mounted in a landscape teleprompter rig.
+  Switching into or out of portrait can briefly recreate the app (a
+  normal Android behavior on this project's target API level) — your
+  loaded script, its position, and your other settings are all
+  preserved through that.
+- **Load Last Script on Launch** — On (default, the app's original
+  behavior) automatically reopens the last script you had loaded each
+  time you start the app. Off starts every launch with no script loaded
+  instead; it never deletes the remembered script file, so turning it
+  back On picks up right where you left off.
 
 ## Script Creation and Editing
 
@@ -392,6 +423,10 @@ Confirmed on this device:
   status/navigation bar hiding are also physically tested and confirmed
   working on this device.
 
+**Not yet tested on this device**: the Settings screen and its three
+settings (Text Alignment, Prompter Orientation, Load Last Script on
+Launch).
+
 ### ASUS Nexus 7 (2013, second generation)
 
 Physically tested. Runs Android 6.0.1 (API level 23). Installs and
@@ -409,6 +444,8 @@ compact-layout check.
   on this device. Running API 23, this device specifically exercises the
   newer immersive-mode system-bar behavior rather than the older
   device's legacy path.
+
+**Not yet tested on this device**: same as the Lenovo above.
 
 ### Acer Iconia Tab A500
 
@@ -441,6 +478,11 @@ the Lenovo-vs-Nexus-7 comparison.
 Treat any A500-specific claim elsewhere in this document beyond the two
 refinements above as intent, not confirmed behavior, until this section
 is updated to say otherwise.
+
+**Not yet tested on this device**: the Settings screen and its three
+settings. Vertical Prompter Orientation in particular has not been run
+on this device — the only one this project has confirmed exercises the
+older, legacy (pre-immersive-mode) system-bar path at all.
 
 ## Troubleshooting
 
