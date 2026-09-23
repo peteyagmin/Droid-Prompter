@@ -391,8 +391,10 @@ public class MainActivity extends Activity {
         mirrorToggle.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+                boolean wasReverseScrollMode = isReverseScrollMode();
                 mirrorEnabled = isChecked;
                 applyMirror();
+                remapScrollPositionForMirrorModeChange(wasReverseScrollMode != isReverseScrollMode());
                 savePreferences();
             }
         });
@@ -426,9 +428,13 @@ public class MainActivity extends Activity {
         // Activity (and from the background), so re-reading here -- rather
         // than wiring a dedicated result path just for Settings -- covers
         // that requirement for free.
+        boolean wasReverseScrollMode = isReverseScrollMode();
         loadDisplayAndStartupPreferences();
         applyTextAlignment();
         applyMirror();
+        if (uiState == UiState.CONTROLS) {
+            remapScrollPositionForMirrorModeChange(wasReverseScrollMode != isReverseScrollMode());
+        }
         if (pendingTransition == PendingTransition.ENTER_PROMPTER) {
             continueEnterPrompter();
         } else if (pendingTransition == PendingTransition.EXIT_TO_CONTROLS) {
@@ -694,7 +700,7 @@ public class MainActivity extends Activity {
         scrollView.post(new Runnable() {
             @Override
             public void run() {
-                scrollView.scrollTo(0, 0);
+                scrollView.scrollTo(0, getScriptStartScrollY(computeMaxScroll()));
             }
         });
     }
@@ -713,6 +719,130 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Full-screen opening/trailing padding (OPENING_SPACE_FRACTION,
+     * END_SPACE_FRACTION), aware of Mirror On + Flip and Rotate's reverse
+     * logical scrolling (see isReverseScrollMode()). Applies directly via
+     * applyScriptPadding() -- the sole caller is resetToWaitingFromTop(),
+     * itself the sole full-screen padding entry point for Start Prompter/
+     * Restart, so no other call site duplicates this arithmetic.
+     *
+     * Normal/Flip: top/bottom padding are OPENING_SPACE_FRACTION/
+     * END_SPACE_FRACTION of the viewport, exactly as before this feature.
+     *
+     * Flip and Rotate: the 180-degree rotation (applyMirror()) is a pure
+     * draw-time transform about scriptText's own center, which -- combined
+     * with ScrollView clipping to an untransformed scrollY window -- makes
+     * the *rendered* content within that window a top/bottom mirror image
+     * of what scrollY alone would suggest (see PROJECT_SPEC.md section 35
+     * for the full derivation). Swapping which fraction drives which edge
+     * -- top padding becomes (1 - OPENING_SPACE_FRACTION) of the viewport,
+     * bottom padding becomes (1 - END_SPACE_FRACTION) -- exactly cancels
+     * that inversion, so the first line still opens at the same on-screen
+     * height, and the final line still settles at the same on-screen
+     * height, as in Flip/Mirror Off. Verified algebraically, not applied
+     * blindly: see the derivation referenced above.
+     */
+    private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
+        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+        float topFraction = isReverseScrollMode() ? (1.0f - OPENING_SPACE_FRACTION) : OPENING_SPACE_FRACTION;
+        float bottomFraction = isReverseScrollMode() ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
+        int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
+        int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
+        applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
+    }
+
+    /**
+     * True only for Mirror On + Flip and Rotate (AppConstants.
+     * MIRROR_MODE_FLIP_ROTATE) -- the one Mirror Mode whose 180-degree
+     * rotation (applyMirror()) makes the rendered content a top/bottom
+     * mirror image of scrollY's untransformed layout order (see
+     * applyFullScreenScriptPadding()'s doc comment). The sole place this
+     * condition is computed; every direction-aware method below calls this
+     * rather than comparing mirrorEnabled/mirrorMode directly, so the
+     * comparison can never drift out of sync across call sites.
+     */
+    private boolean isReverseScrollMode() {
+        return mirrorEnabled && AppConstants.MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode);
+    }
+
+    /**
+     * The current maximum valid scrollY, clamped to zero for a script that
+     * fits entirely within the viewport. Must only be called once
+     * scriptText/scrollView have actually been laid out with their final
+     * padding/orientation/system-bar state for the caller's purposes (the
+     * existing scrollView.post()-chaining pattern used throughout this
+     * class) -- it does not itself wait for layout.
+     */
+    private int computeMaxScroll() {
+        return Math.max(0, scriptText.getHeight() - scrollView.getHeight());
+    }
+
+    /**
+     * The scrollY that represents the very beginning of the script, for
+     * the currently active scroll direction: 0 normally (Mirror Off or
+     * Mirror On + Flip), or maxScroll in reverse mode (Mirror On + Flip
+     * and Rotate), since reverse mode's 180-degree rotation renders the
+     * scrollY-0 end of the content as the visual end, not the beginning --
+     * see isReverseScrollMode()'s doc comment.
+     */
+    private int getScriptStartScrollY(int maxScroll) {
+        return isReverseScrollMode() ? maxScroll : 0;
+    }
+
+    /** The scrollY that represents the very end of the script -- the mirror image of getScriptStartScrollY(). */
+    private int getScriptEndScrollY(int maxScroll) {
+        return isReverseScrollMode() ? 0 : maxScroll;
+    }
+
+    /**
+     * Applies wholePixels of travel (always a non-negative distance, never
+     * itself negated -- see performScrollTick()/performPreviewScrollTick())
+     * toward the script's visual end, adding it to currentScrollY normally
+     * or subtracting it in reverse mode, then clamping to the valid
+     * [0, maxScroll] range either way. Only the *direction the travel
+     * distance is applied* depends on isReverseScrollMode(); the elapsed-
+     * time/fractional-accumulator mechanism that produced wholePixels
+     * (section 34) is entirely untouched by this method.
+     */
+    private int moveTowardScriptEnd(int currentScrollY, int wholePixels, int maxScroll) {
+        int proposed = isReverseScrollMode() ? currentScrollY - wholePixels : currentScrollY + wholePixels;
+        return Math.min(Math.max(proposed, 0), maxScroll);
+    }
+
+    /** Whether scrollY is already exactly at the script's visual end for the currently active scroll direction. */
+    private boolean hasReachedScriptEnd(int scrollY, int maxScroll) {
+        return scrollY == getScriptEndScrollY(maxScroll);
+    }
+
+    /**
+     * Remaps the preview's current scrollY to the equivalent position under
+     * a newly applied Mirror/Mirror Mode combination, only when the
+     * effective scroll direction (isReverseScrollMode()) actually changed
+     * -- called from onResume() (a Settings-driven Mirror Mode change) and
+     * the main Mirror toggle's listener (an On/Off change that can also
+     * flip the effective direction, when the saved Mirror Mode is Flip and
+     * Rotate). Maps current progress (0.0 at the old direction's start,
+     * 1.0 at its end) onto the equivalent progress under the new direction
+     * -- symmetric, so the same formula works for either direction of
+     * switch -- rather than leaving the preview sitting at what is now the
+     * wrong end. A no-op whenever the direction didn't change, or the
+     * script is too short to scroll at all (maxScroll <= 0).
+     */
+    private void remapScrollPositionForMirrorModeChange(boolean directionChanged) {
+        if (!directionChanged) {
+            return;
+        }
+        int maxScroll = computeMaxScroll();
+        if (maxScroll <= 0) {
+            return;
+        }
+        int currentScrollY = scrollView.getScrollY();
+        float progress = (float) currentScrollY / (float) maxScroll;
+        int mappedScrollY = Math.round(maxScroll * (1.0f - progress));
+        scrollView.scrollTo(scrollView.getScrollX(), mappedScrollY);
+    }
+
+    /**
      * Centralized script-padding switch used whenever uiState crosses the
      * CONTROLS / full-screen boundary in the direction that should keep the
      * same passage on screen (exitFullScreenToControls()). scriptText's XML
@@ -721,40 +851,45 @@ public class MainActivity extends Activity {
      * when entering full screen (resetToWaitingFromTop() always resets to
      * the top instead, so it applies padding directly).
      *
-     * Only the top-padding delta shifts the preserved scroll position:
-     * scrollY is measured from the top of the content, so a bottom-padding
-     * change alone never moves any earlier content on screen. The new
-     * bottom padding is still applied together with the new top padding in
-     * the same call, so the post-layout clamp below uses the correct
-     * (already-updated) maximum scroll range.
+     * Normal/Flip mode: scrollY is measured from the top of the content in
+     * the same order it is rendered, so the top-padding delta alone shifts
+     * the preserved position -- a bottom-padding change never moves any
+     * earlier content on screen.
      *
-     * If the script is already at its very start (scrollY == 0), the new
-     * padding is applied and scrollY is left at 0: that alone produces the
-     * correct per-mode look (first line near the top in CONTROLS, first
-     * line ~77.5% down in full screen) with no scroll adjustment needed.
-     * Otherwise scrollY is shifted by the top-padding delta, then clamped
-     * once the padding change has actually been laid out, so the same
-     * approximate passage of text stays on screen instead of jumping to a
-     * different part of the script.
+     * Reverse mode (Flip and Rotate): the rendered order is inverted (see
+     * applyFullScreenScriptPadding()'s doc comment), so it is the
+     * *bottom*-padding delta that shifts the preserved position instead --
+     * the mirror image of the normal-mode case, derived the same way (a
+     * fixed on-screen position must keep showing the same underlying text
+     * as total content height and top/bottom padding both change).
+     *
+     * Either way scrollY is shifted by the mode-appropriate delta, then
+     * clamped to [0, maxScroll] once the padding change has actually been
+     * laid out, so the same approximate passage of text stays on screen
+     * instead of jumping to a different part of the script -- including the
+     * case where the prior position was already at that direction's visual
+     * start, which the clamp alone reduces to correctly (see PROJECT_SPEC.md
+     * section 35 for the full derivation) without a separate fast path.
      */
     private void switchScriptPaddingPreservingPosition(final int newTopPaddingPx,
             final int newBottomPaddingPx, final Runnable afterSettled) {
         final int oldTopPaddingPx = scriptText.getPaddingTop();
+        final int oldBottomPaddingPx = scriptText.getPaddingBottom();
         final int topDelta = newTopPaddingPx - oldTopPaddingPx;
+        final int bottomDelta = newBottomPaddingPx - oldBottomPaddingPx;
         final int previousScrollY = scrollView.getScrollY();
-        final boolean atStart = previousScrollY <= 0;
+        final boolean reverse = isReverseScrollMode();
 
         applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
 
         scrollView.post(new Runnable() {
             @Override
             public void run() {
-                if (!atStart) {
-                    int maxScroll = Math.max(0, scriptText.getHeight() - scrollView.getHeight());
-                    int proposed = previousScrollY + topDelta;
-                    int clamped = Math.min(Math.max(proposed, 0), maxScroll);
-                    scrollView.scrollTo(scrollView.getScrollX(), clamped);
-                }
+                int maxScroll = computeMaxScroll();
+                int delta = reverse ? bottomDelta : topDelta;
+                int proposed = previousScrollY + delta;
+                int clamped = Math.min(Math.max(proposed, 0), maxScroll);
+                scrollView.scrollTo(scrollView.getScrollX(), clamped);
                 if (afterSettled != null) {
                     afterSettled.run();
                 }
@@ -1006,17 +1141,11 @@ public class MainActivity extends Activity {
                 scrollView.post(new Runnable() {
                     @Override
                     public void run() {
-                        int fullScreenHeightPx = scrollView.getHeight();
-                        int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-                        int newTopPaddingPx = Math.max(sidePaddingPx,
-                                Math.round(fullScreenHeightPx * OPENING_SPACE_FRACTION));
-                        int newBottomPaddingPx = Math.max(sidePaddingPx,
-                                Math.round(fullScreenHeightPx * END_SPACE_FRACTION));
-                        applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
+                        applyFullScreenScriptPadding(scrollView.getHeight());
                         scrollView.post(new Runnable() {
                             @Override
                             public void run() {
-                                scrollView.scrollTo(0, 0);
+                                scrollView.scrollTo(0, getScriptStartScrollY(computeMaxScroll()));
                             }
                         });
                     }
@@ -1195,13 +1324,12 @@ public class MainActivity extends Activity {
         int wholePixels = (int) fullScreenScrollRemainderPx;
         if (wholePixels > 0) {
             fullScreenScrollRemainderPx -= wholePixels;
-            int newY = scrollView.getScrollY() + wholePixels;
-            if (newY >= maxScroll) {
-                scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
+            int newY = moveTowardScriptEnd(scrollView.getScrollY(), wholePixels, maxScroll);
+            scrollView.scrollTo(scrollView.getScrollX(), newY);
+            if (hasReachedScriptEnd(newY, maxScroll)) {
                 stopScrollingAtEnd();
                 return;
             }
-            scrollView.scrollTo(scrollView.getScrollX(), newY);
         }
         scrollHandler.postDelayed(scrollRunnable, SCROLL_INTERVAL_MS);
     }
@@ -1301,7 +1429,7 @@ public class MainActivity extends Activity {
                 if (!previewScrolling || uiState != UiState.CONTROLS) {
                     return;
                 }
-                scrollView.scrollTo(0, 0);
+                scrollView.scrollTo(0, getScriptStartScrollY(computeMaxScroll()));
                 previewScrollRemainderPx = 0f;
                 previewScrollLastTickUptimeMs = SystemClock.uptimeMillis();
                 scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
@@ -1352,13 +1480,12 @@ public class MainActivity extends Activity {
         int wholePixels = (int) previewScrollRemainderPx;
         if (wholePixels > 0) {
             previewScrollRemainderPx -= wholePixels;
-            int newY = scrollView.getScrollY() + wholePixels;
-            if (newY >= maxScroll) {
-                scrollView.scrollTo(scrollView.getScrollX(), maxScroll);
+            int newY = moveTowardScriptEnd(scrollView.getScrollY(), wholePixels, maxScroll);
+            scrollView.scrollTo(scrollView.getScrollX(), newY);
+            if (hasReachedScriptEnd(newY, maxScroll)) {
                 stopPreviewScrolling();
                 return;
             }
-            scrollView.scrollTo(scrollView.getScrollX(), newY);
         }
         scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
     }
@@ -1452,9 +1579,21 @@ public class MainActivity extends Activity {
      * nothing here ever freezes it with setPivotX()/setPivotY(). A 180-
      * degree rotation combined with a horizontal flip also never changes
      * a view's own bounding box, so this can never clip content within
-     * its own view -- and since these are draw-time Canvas transforms,
-     * not layout changes, ScrollView's scrollY/scroll-direction logic is
-     * entirely unaffected regardless of what's visually rendered.
+     * its own view.
+     *
+     * This is still a pure draw-time Canvas transform -- it never touches
+     * scriptText's measured/laid-out bounds, so ScrollView.scrollTo()/
+     * getScrollY() and every maxScroll calculation keep operating on the
+     * exact same untransformed coordinates regardless of what's applied
+     * here. But because Flip and Rotate's 180-degree rotation pivots about
+     * scriptText's own center, it renders the content ScrollView clips to
+     * a given scrollY window as a top/bottom mirror image of that window's
+     * untransformed layout order -- so scrollY 0 renders as the visual
+     * *end* of the script, not the beginning, under Flip and Rotate. This
+     * is exactly the reverse logical scrolling model isReverseScrollMode()/
+     * getScriptStartScrollY()/getScriptEndScrollY()/moveTowardScriptEnd()/
+     * hasReachedScriptEnd() implement on top of the unchanged scrollY
+     * mechanics -- see PROJECT_SPEC.md section 35 for the full derivation.
      */
     private void applyMirror() {
         float scaleX = mirrorEnabled ? -1f : 1f;

@@ -3,17 +3,24 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `76e0b30`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for a new Mirror Mode
-Settings preference on top of it (section 35): the existing Mirror
-On/Off toggle is unchanged, but now applies one of two transformations
-— Flip (the pre-existing behavior, default) or Flip and Rotate (an
-additional absolute 180-degree rotation, for mounting the tablet with
-operator controls upright) — to `scriptText`/`countdownText`/
-`tapInstructionText` via a rewritten, centralized `applyMirror()`.
-Entirely a rendering-layer change: no scrolling/state-machine code was
-touched. The commit that lands this update is necessarily newer than
-`76e0b30`; that commit's hash is reported separately at the end of the
+**Documented as of commit `13abf34`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for a bug fix to the
+Mirror On + Flip and Rotate setting introduced at that commit (section
+35): Flip and Rotate's 180-degree rotation was found to make Preview and
+full-screen Prompter scrolling start at the end of the script and run
+backward toward the beginning, since the rotation is a pure draw-time
+transform that leaves `ScrollView`'s untransformed `scrollY` order
+unaffected while visually inverting what that order renders. This round
+adds an explicit **reverse logical scrolling** model, active only for
+Mirror On + Flip and Rotate, so the presenter always experiences the
+script running from its first line to its last regardless of Mirror
+Mode — see section 35 for the full derivation and implementation. The
+`13abf34` round's claim that "Mirror Mode required zero changes anywhere
+in the scrolling/state-machine code" is corrected by this round; it was
+true only in the narrow sense that `scrollY`'s own numeric mechanics
+were untouched, not that no *direction*-aware logic was needed on top of
+it. The commit that lands this update is necessarily newer than
+`13abf34`; that commit's hash is reported separately at the end of the
 task that made these changes, not inferred here.
 
 Throughout this document:
@@ -2292,7 +2299,7 @@ recomputes automatically whenever the view's measured size changes
 exactly the centered pivot a 180-degree rotation needs, so no explicit
 post-layout pivot-setting code was necessary.
 
-### Why this can never clip or affect scrolling
+### Why this can never clip, and why it *does* affect logical scroll direction
 
 A 180-degree rotation, and a horizontal flip, are each individually
 bounds-preserving: rotating a rectangle 180 degrees about its own
@@ -2303,20 +2310,270 @@ apparent footprint beyond its own untransformed bounds, and content
 can never clip *because of* this transform (only content that would
 already have been clipped without it could still be).
 
-More fundamentally, `setScaleX()`/`setScaleY()`/`setRotation()` are
-draw-time Canvas matrix transforms applied by the `View` framework —
-they never affect that `View`'s measured/laid-out width, height, or
-position, which is what `ScrollView.scrollTo()`, `getScrollY()`, and
-every `maxScroll` calculation in this codebase (sections 14, 19, 34)
-actually operate on. Mirror Mode therefore required **zero** changes
-anywhere in the scrolling/state-machine code: `performScrollTick()`,
-`performPreviewScrollTick()`, `beginActiveScrolling()`,
-`resetToWaitingFromTop()`, `stopScrollingAtEnd()`, and every
-`maxScroll`/`scrollY` calculation are byte-for-byte unchanged by this
-feature. The rendered *pixels* may appear flipped and/or rotated on the
-physical screen, but `scrollY` always still counts up from `0` toward
-the same `maxScroll` it always did, in the same direction, against the
-same untransformed layout coordinates.
+`setScaleX()`/`setScaleY()`/`setRotation()` are draw-time Canvas matrix
+transforms applied by the `View` framework — they never affect that
+`View`'s measured/laid-out width, height, or position, so
+`ScrollView.scrollTo()`/`getScrollY()` and every `maxScroll` calculation
+in this codebase (sections 14, 19, 34) keep operating on exactly the
+same untransformed coordinates regardless of what Mirror Mode is
+active. In that narrow sense `performScrollTick()`,
+`performPreviewScrollTick()`, `beginActiveScrolling()`, and every
+`maxScroll` calculation's *numeric mechanics* are unchanged by Mirror
+Mode, and an earlier version of this document took that to mean no
+scrolling code needed to change at all. That conclusion was wrong.
+
+Flip and Rotate's 180-degree rotation pivots about `scriptText`'s own
+center — the center of the *entire* content height, not the viewport.
+`ScrollView` clips to a fixed viewport-sized window of untransformed
+content coordinates `[scrollY, scrollY + viewportHeight]`, and the
+rotation reflects the *whole* content (height `H`) about its center
+before that window is drawn: a point at untransformed content position
+`p` draws at position `H − p`. Working through what that means for what
+appears inside the clip window at a given `scrollY` (see the box below)
+shows that `scrollY = 0` renders the **end** of the script, and
+`scrollY = maxScroll` renders the **beginning** — the exact opposite of
+Mirror Off/Flip — and that content *within* the visible window also
+reads bottom-to-top of the untransformed layout instead of top-to-bottom.
+This is the root cause of the bug this round fixes: before this round,
+Preview and full-screen Prompter mode always started at `scrollY = 0`
+and increased `scrollY` toward `maxScroll`, which is correct for Mirror
+Off/Flip but under Flip and Rotate started the presenter at the visual
+**end** of the script and scrolled **backward** toward the beginning.
+
+**Derivation** (content height `H` = `scriptText.getHeight()`,
+viewport height `V` = `scrollView.getHeight()`, `maxScroll = H − V`):
+the visible window in *canvas* coordinates is fixed at
+`[scrollY, scrollY + V]` regardless of rotation (the `ScrollView` clip
+is applied before the child's own rotation matrix is concatenated). A
+content point at untransformed position `q` draws at canvas position
+`H − q`. Solving `H − q ∈ [scrollY, scrollY + V]` for `q` gives the
+untransformed content range actually visible: `q ∈ [H − scrollY − V,
+H − scrollY]`. At `scrollY = 0` this is `[H − V, H]` — the final `V`
+pixels of content, i.e. the end of the script. At `scrollY = maxScroll
+= H − V` this is `[0, V]` — the first `V` pixels, i.e. the beginning.
+Within that visible window, a point at `q` draws at relative (on-screen,
+0 = top of viewport) position `(H − q) − scrollY`, which *decreases* as
+`q` increases — content reads bottom-to-top of its own untransformed
+layout, i.e. vertically flipped, exactly as the "Flip and Rotate ≡
+horizontal flip + Y-flip" mathematical equivalence noted above predicts.
+
+### Reverse logical scrolling (Flip and Rotate)
+
+Fixing the rendering transform itself was explicitly out of scope (it
+is correct and must not change — see the transform table above); the
+fix instead layers an explicit **reverse logical scrolling** model on
+top of the unchanged `scrollY` mechanics, active only when
+`isReverseScrollMode()` is true:
+
+```java
+private boolean isReverseScrollMode() {
+    return mirrorEnabled && AppConstants.MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode);
+}
+```
+
+| | Mirror Off / Mirror On + Flip | Mirror On + Flip and Rotate |
+| --- | --- | --- |
+| Visual beginning (`getScriptStartScrollY()`) | `0` | `maxScroll` |
+| Visual end (`getScriptEndScrollY()`) | `maxScroll` | `0` |
+| Automatic scrolling direction | `scrollY` increases | `scrollY` decreases |
+| Reaching the end means | `scrollY >= maxScroll` | `scrollY <= 0` |
+
+Five centralized helpers are the *only* place this condition is ever
+consulted — no other method compares `mirrorEnabled`/`mirrorMode`
+directly:
+
+- `isReverseScrollMode()` — the condition itself.
+- `getScriptStartScrollY(maxScroll)` / `getScriptEndScrollY(maxScroll)`
+  — the mode-appropriate beginning/end `scrollY`.
+- `moveTowardScriptEnd(currentScrollY, wholePixels, maxScroll)` — adds
+  `wholePixels` to `scrollY` normally, subtracts it in reverse mode,
+  clamping to `[0, maxScroll]` either way. `wholePixels` itself is
+  always the non-negative whole-pixel distance produced by the
+  elapsed-time/fractional-accumulator model (section 34) — that model,
+  and the accumulator's sign, are entirely untouched; only the
+  direction the resulting distance is *applied* to `scrollY` changes.
+- `hasReachedScriptEnd(scrollY, maxScroll)` — `scrollY ==
+  getScriptEndScrollY(maxScroll)`, always exact since
+  `moveTowardScriptEnd()`'s clamp guarantees an overshoot lands exactly
+  on `0` or `maxScroll`.
+
+`performScrollTick()` and `performPreviewScrollTick()` both now compute
+`newY` via `moveTowardScriptEnd()` and check `hasReachedScriptEnd()`
+instead of a hardcoded `newY >= maxScroll`/`scrollTo(..., maxScroll)`
+comparison — the only change to either method's shape; the rest
+(elapsed-time measurement, the fractional accumulator, the single
+`scrollTo()` call, the single end-detection call) is byte-for-byte the
+same structure section 34 describes.
+
+### Reverse-mode full-screen padding
+
+`OPENING_SPACE_FRACTION` (`0.775f`) and `END_SPACE_FRACTION` (`0.4f`)
+position the first/last line at a comfortable on-screen height in
+Mirror Off/Flip by padding `scriptText` proportionally to the measured
+full-screen viewport height (section 21). Because Flip and Rotate
+renders content vertically flipped within its clip window (derivation
+above), naively reusing the same top/bottom padding fractions would
+place the first and last lines at the *wrong* heights. `AppConstants`-
+independent algebra (substituting the visual-start/visual-end
+conditions into the "relative on-screen position" formula derived
+above) gives the correct reverse-mode fractions:
+
+- Reverse-mode top padding: `viewportHeight × (1.0 −
+  OPENING_SPACE_FRACTION)` = `0.225 × viewportHeight`.
+- Reverse-mode bottom padding: `viewportHeight × (1.0 −
+  END_SPACE_FRACTION)` = `0.6 × viewportHeight`.
+
+These place the first line at the same ~77.5%-down opening height, and
+the final line at the same ~60%-down resting height, as Mirror
+Off/Flip — verified by the derivation above, not applied on the
+suggestion's word alone. Both fractions, and the mode selection, are
+centralized in one method:
+
+```java
+private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
+    int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
+    float topFraction = isReverseScrollMode()
+            ? (1.0f - OPENING_SPACE_FRACTION) : OPENING_SPACE_FRACTION;
+    float bottomFraction = isReverseScrollMode()
+            ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
+    int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
+    int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
+    applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
+}
+```
+
+`resetToWaitingFromTop()` (Start Prompter and Restart's shared full-screen
+entry point, section 17) is the sole caller, called only after the
+system bars are hidden and that layout has settled (section 22) — the
+same "measure after settling" requirement as before, unchanged.
+Preview's own padding (minimal, uniform `SCRIPT_PADDING_DP` on all
+sides, section 14) needs no direction-aware variant — it doesn't use
+the opening/end fractions at all, only the *starting position* within
+that minimal padding differs by direction (below).
+
+### Preview start/end in reverse mode
+
+Every Preview press still resets to the *visual* beginning, preserving
+the existing "reset to top" behavior (section 14). `startPreviewScrolling()`
+applies minimal padding, waits for layout via `scrollView.post()`, then
+scrolls to `getScriptStartScrollY(computeMaxScroll())` instead of a
+hardcoded `scrollTo(0, 0)` — `0` in Mirror Off/Flip (unchanged), or the
+freshly measured `maxScroll` in Flip and Rotate. `performPreviewScrollTick()`
+uses `moveTowardScriptEnd()`/`hasReachedScriptEnd()` as above: Preview
+reaches its end at `scrollY >= maxScroll` (normal/Flip) or `scrollY <= 0`
+(Flip and Rotate), then `stopPreviewScrolling()` runs exactly once,
+relabeling Stop back to Preview and leaving the script at its visual
+final position. A script freshly loaded via `loadScriptFile()` is
+likewise positioned at `getScriptStartScrollY(computeMaxScroll())`
+rather than a hardcoded `scrollTo(0, 0)`, so the initial (non-scrolling)
+control-screen preview also opens on the correct visual beginning under
+Flip and Rotate.
+
+### Full-screen start/end in reverse mode
+
+Start Prompter/Restart (`resetToWaitingFromTop()`) always begins at the
+script's first line regardless of Mirror Mode. Mirror Off/Flip: enter
+orientation → hide bars → wait for layout → apply normal opening/
+trailing padding → wait for layout → `scrollTo(0, 0)` →
+`WAITING_FOR_TAP` — unchanged. Flip and Rotate: the same sequence, but
+`applyFullScreenScriptPadding()` applies the reverse-mode fractions
+above, and the final step scrolls to `getScriptStartScrollY(computeMaxScroll())`
+— `maxScroll`, computed only after the reverse-mode padding change has
+itself been laid out, so the measurement is accurate. Neither branch
+starts a countdown or scrolling automatically; both still require a Tap
+to Start. Full-screen scrolling reaches its end via the same
+`hasReachedScriptEnd()` check as Preview (`scrollY <= 0` in reverse
+mode), routing through the existing `stopScrollingAtEnd()` →
+`END_OF_SCRIPT_WAITING` path exactly once either way — the final text
+stays unobstructed until a tap reveals the reduced Restart/Back to
+Controls menu (section 20), unchanged.
+
+### Pause and Resume in reverse mode
+
+Unchanged in shape, direction-correct by construction: pausing
+(`pauseFullScreenScrolling()`) stops at the exact current `scrollY` and
+never touches it. Resume runs the same five-second countdown as a fresh
+start, then `beginActiveScrolling()` resets the elapsed-time baseline
+and fractional accumulator (never the `scrollY` position) and posts the
+first tick — which then calls `moveTowardScriptEnd()`, continuing to
+*decrease* `scrollY` in reverse mode from the exact paused position,
+since `isReverseScrollMode()` is read fresh on every tick rather than
+being baked in when scrolling began.
+
+### Restart in reverse mode
+
+`restartFromPauseMenu()` calls the same `resetToWaitingFromTop()` Start
+Prompter uses, so it inherits the same direction-aware padding and start
+position described above with no separate code path — Restart from
+Flip and Rotate lands back on `getScriptStartScrollY(maxScroll)` =
+`maxScroll` after reapplying reverse-mode padding, exactly like a fresh
+Start Prompter tap.
+
+### Back to Controls in reverse mode
+
+`switchScriptPaddingPreservingPosition()` (used only by
+`exitFullScreenToControls()`/`continueExitToControls()`, section 21)
+preserves the approximate passage on screen across the full-screen ↔
+CONTROLS padding change. In Mirror Off/Flip, `scrollY` is measured from
+the top of the content in the same order it renders, so only the
+**top**-padding delta needs to be added to the previous `scrollY`
+(unchanged from before this round). In reverse mode the rendered order
+is inverted, so the position-preserving delta comes from the **bottom**-
+padding change instead — derived the same way (solving for the `scrollY`
+that keeps the same on-screen relative position as both `H` and the
+top/bottom padding change) rather than reused blindly from the
+forward-mode formula. Both branches then clamp to `[0, maxScroll]` once
+the padding change has settled; a prior position already at that
+direction's visual start reduces correctly under the clamp alone, so no
+separate "already at start" fast path is needed (an earlier version of
+this method had one, keyed off a hardcoded `scrollY <= 0`, which would
+have been wrong in reverse mode where `scrollY <= 0` means the visual
+*end*, not the start — removed as part of this fix).
+
+### Mode-switch progress mapping
+
+`scriptText` is shared by CONTROLS' preview and every full-screen state,
+and it is mirrored/rotated in CONTROLS too — so the control-screen
+preview's own `scrollY` is also reverse-mode-aware, and a Mirror/Mirror
+Mode change reachable while CONTROLS is showing (Settings' Mirror Mode
+radio group, or the main screen's own Mirror On/Off toggle) can flip the
+effective scroll direction out from under an already-positioned preview.
+`remapScrollPositionForMirrorModeChange(directionChanged)` handles both:
+
+```java
+private void remapScrollPositionForMirrorModeChange(boolean directionChanged) {
+    if (!directionChanged) return;
+    int maxScroll = computeMaxScroll();
+    if (maxScroll <= 0) return;
+    int currentScrollY = scrollView.getScrollY();
+    float progress = (float) currentScrollY / (float) maxScroll;
+    int mappedScrollY = Math.round(maxScroll * (1.0f - progress));
+    scrollView.scrollTo(scrollView.getScrollX(), mappedScrollY);
+}
+```
+
+`progress` (0.0 at the *old* direction's visual start, 1.0 at its visual
+end) maps symmetrically onto the equivalent progress under the *new*
+direction — the same formula works for either direction of switch,
+since the mapping is its own inverse. A no-op whenever the direction
+didn't actually change, or the script is too short to scroll
+(`maxScroll <= 0`). Two call sites, both capturing `isReverseScrollMode()`
+before reapplying `mirrorMode`/`mirrorEnabled` and comparing against it
+after:
+
+- `onResume()`, guarded by `uiState == CONTROLS` — covers returning from
+  `SettingsActivity` with a newly selected Mirror Mode while Mirror is
+  On (a Mirror Mode change alone never affects direction while Mirror is
+  Off, since `isReverseScrollMode()` is `false` either way).
+- `mirrorToggle`'s `OnCheckedChangeListener` — an On/Off change can also
+  flip the effective direction, whenever the saved Mirror Mode is Flip
+  and Rotate.
+
+Neither call site starts or stops Preview — a script mid-Preview when
+the mode changes keeps running, just continuing from the remapped
+position in the new direction on its very next tick, since
+`performPreviewScrollTick()` re-reads `isReverseScrollMode()` fresh each
+tick rather than caching it.
 
 ### Interaction with Text Alignment
 
@@ -2343,7 +2600,15 @@ Because `applyMirror()`'s transform is relative to each view's own
 actual current orientation, both mirror modes work identically whether
 `scrollView`'s measured dimensions currently reflect landscape or
 portrait — no orientation-conditional branch exists or is needed in
-`applyMirror()`.
+`applyMirror()`. Reverse scrolling (this round) reads the same
+orientation-agnostic `scrollView`/`scriptText` measurements as every
+other `maxScroll` calculation, and `resetToWaitingFromTop()` only reads
+them after the portrait-orientation switch and the hidden-system-bar
+layout have both settled (section 32's "measure after settling" rule,
+unchanged) — so reverse-mode start/end positions and padding are
+equally correct in Horizontal and Vertical Prompter Orientation, with no
+orientation-conditional branch needed in the reverse-scrolling helpers
+either.
 
 ### Preview
 
@@ -2353,9 +2618,13 @@ doesn't distinguish between them, so the preview reflects the active
 Mirror/Mirror Mode combination immediately, the same as it already did
 for the pre-existing Flip-only behavior. Preview's own elapsed-time
 scrolling loop (section 34) reads/writes `scrollView`'s untransformed
-scroll position exactly as before — unaffected by whatever rotation or
-flip is currently applied to what's drawn on screen, per the "why this
-can never clip or affect scrolling" reasoning above.
+`scrollY` exactly as before — unaffected by whatever rotation or flip is
+currently applied to what's drawn on screen — but, as of this round,
+*which* `scrollY` counts as Preview's start/end, and which direction a
+tick moves it, both go through the same `isReverseScrollMode()`-aware
+helpers full-screen scrolling uses (see "Reverse logical scrolling"
+above), since the two share `scrollView`/`scriptText` and are equally
+subject to the rendering inversion Flip and Rotate produces.
 
 ### Settings-return refresh
 
@@ -2368,11 +2637,18 @@ no-op (still computes the identity transform) if Mirror is currently
 Off. This is the same reread point already used for Text Alignment,
 Prompter Orientation, and Load Last Script on Launch (sections 31–33) —
 no dedicated `onActivityResult()` handling was added for Settings.
-`applyMirror()` touches only `scaleX`/`scaleY`/`rotation` on the three
-presenter-facing views, so this reread can never touch the loaded
-script, scroll position, Preview's running/stopped state, or `uiState`
-— confirmed by inspection that `applyMirror()`/`applyMirrorTransform()`
-call nothing else.
+`applyMirror()` itself still touches only `scaleX`/`scaleY`/`rotation`
+on the three presenter-facing views and nothing else. As of this round,
+`onResume()` additionally captures `isReverseScrollMode()` immediately
+before this reread and compares it against the value immediately after,
+calling `remapScrollPositionForMirrorModeChange()` (guarded by
+`uiState == CONTROLS`) when they differ — see "Mode-switch progress
+mapping" above — so a Mirror Mode change that flips the effective
+direction repositions the CONTROLS preview to the equivalent passage in
+the new direction rather than leaving it at what became the wrong end.
+This still never touches the loaded script, `uiState`, or Preview's
+running/stopped state (a running Preview simply continues from the
+remapped position on its next tick).
 
 ### Persistence and upgrade defaults
 
@@ -2390,7 +2666,19 @@ existing preference — `KEY_MIRROR_MODE` is purely additive.
 in particular the six alignment/mode combinations and the six
 orientation/mode combinations this feature spans, on real hardware —
 none of the visual outcomes here can be confirmed by source inspection
-or a successful build alone.
+or a successful build alone. This round's reverse-scrolling fix
+additionally requires physical confirmation that, under Mirror On +
+Flip and Rotate specifically: Preview and Start Prompter both visually
+begin at the script's first line and end at its last; automatic
+scrolling visually moves in the correct (forward-reading) direction at
+every Speed setting; the opening and final-line resting heights visually
+match Mirror Off/Flip; Resume continues in the correct direction from
+the exact paused position; and a Mirror Mode or Mirror On/Off change
+made from CONTROLS repositions the preview to the correct end rather
+than leaving it reversed. None of this can be confirmed by source
+inspection or a successful build alone — the algebraic derivation above
+gives high confidence in the formulas, but only physical hardware can
+confirm the actual rendered geometry.
 
 ---
 
@@ -2417,3 +2705,10 @@ was confirmed directly against `app/src/main/java/...`,
 `app/src/main/res/...`, `AndroidManifest.xml`, `app/build.gradle`, and
 `build.sh` as checked out at commit `d37883d`, and, where noted, by
 inspecting the compiled APK/DEX rather than the source alone.
+
+A later round (the reverse-scrolling fix at the top of section 35) found
+that this document's own claim — "Mirror Mode therefore required zero
+changes anywhere in the scrolling/state-machine code" — was itself a
+discrepancy: true only of `scrollY`'s raw numeric mechanics, not of
+whether direction-aware logic was needed on top of them. Corrected in
+place in section 35 rather than left standing.

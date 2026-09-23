@@ -80,6 +80,27 @@ report the discrepancy before proceeding.
   resets all three presenter-facing views' `scaleX`/`scaleY`/`rotation`
   to the identity transform (`1f`/`1f`/`0f`), regardless of the saved
   Mirror Mode.
+- Flip and Rotate's 180-degree rotation preserves the visual transform
+  exactly (never redefine it to fix a scrolling bug) but requires
+  **reverse logical scrolling**, active only when `isReverseScrollMode()`
+  (`mirrorEnabled && MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode)`) is
+  true: because the rotation pivots about `scriptText`'s own center while
+  `ScrollView` clips to an untransformed `scrollY` window, `scrollY = 0`
+  renders the *end* of the script and `scrollY = maxScroll` renders the
+  *beginning* under Flip and Rotate — the mirror image of Mirror
+  Off/Flip. `getScriptStartScrollY()`/`getScriptEndScrollY()`/
+  `moveTowardScriptEnd()`/`hasReachedScriptEnd()` are the sole place this
+  is ever handled; no other method may compare `mirrorEnabled`/
+  `mirrorMode` directly. Preview, Start Prompter/Restart, Resume, and
+  end-detection (both Preview and full-screen) must all honor whichever
+  direction is currently active — visual beginning is always `0`
+  (Mirror Off/Flip) or `maxScroll` (Flip and Rotate); visual end is the
+  opposite. A Mirror or Mirror Mode change that flips the effective
+  direction while a script is loaded in `CONTROLS` must remap the
+  preview's scroll progress to the equivalent position in the new
+  direction (`remapScrollPositionForMirrorModeChange()`) rather than
+  leaving it at the wrong end. Operator-facing controls stay upright and
+  untransformed regardless of scroll direction.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.
