@@ -3,17 +3,18 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `8132609`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for one focused
-visual refinement on top of it: `btnOpenFile`, `btnNewScript`,
-`btnEditScript`, and `btnStart` now all use `@style/SecondaryControlButton`
-instead of `@style/ControlButton` (section 4), matching Mirror, Exit,
-and Preview/Stop's existing 56dp/16sp sizing so every rectangular button
-on the main control screen reads as one consistent size — `ControlButton`
-itself is unchanged and untouched, still used by the full-screen
-pause-menu buttons. The commit that lands this update is necessarily
-newer than `8132609`; that commit's hash is reported separately at the
-end of the task that made these changes, not inferred here.
+**Documented as of commit `76e0b30`** (branch
+`claude/android-teleprompter-app-1wfqsr`), updated for a new Mirror Mode
+Settings preference on top of it (section 35): the existing Mirror
+On/Off toggle is unchanged, but now applies one of two transformations
+— Flip (the pre-existing behavior, default) or Flip and Rotate (an
+additional absolute 180-degree rotation, for mounting the tablet with
+operator controls upright) — to `scriptText`/`countdownText`/
+`tapInstructionText` via a rewritten, centralized `applyMirror()`.
+Entirely a rendering-layer change: no scrolling/state-machine code was
+touched. The commit that lands this update is necessarily newer than
+`76e0b30`; that commit's hash is reported separately at the end of the
+task that made these changes, not inferred here.
 
 Throughout this document:
 
@@ -660,18 +661,28 @@ Source: `ScriptEditorActivity.java`, `AndroidManifest.xml`.
 
 ## 16. Mirror behavior
 
-- `mirrorToggle` (`ToggleButton`) — "Mirror: On" / "Mirror: Off".
-- Persisted via `KEY_MIRROR` (boolean) in `SharedPreferences`.
-- `applyMirror()` sets `scaleX = -1f` (mirrored) or `1f` (normal) on
-  exactly three views: `scriptText`, `countdownText`, and
-  `tapInstructionText`. Nothing else is touched.
+- `mirrorToggle` (`ToggleButton`) — "Mirror: On" / "Mirror: Off". A
+  simple On/Off toggle only — it does not cycle through Mirror Mode
+  choices and never gained a third visible state or a longer label.
+- Persisted via `KEY_MIRROR` (boolean) in `SharedPreferences`, entirely
+  separate from the `KEY_MIRROR_MODE` preference (section 35) that
+  determines *which* transformation Mirror On applies — toggling Mirror
+  never reads or writes `KEY_MIRROR_MODE`, and changing Mirror Mode
+  never reads or writes `KEY_MIRROR`.
+- `applyMirror()` sets `scaleX`, `scaleY`, and `rotation` on exactly
+  three views: `scriptText`, `countdownText`, and `tapInstructionText`,
+  via the shared private helper `applyMirrorTransform(view, scaleX,
+  scaleY, rotation)`. Nothing else is touched. See section 35 for the
+  exact values per Mirror/Mirror Mode combination.
 - Script mirroring: yes (`scriptText`).
 - Countdown mirroring: yes (`countdownText`).
 - Tap to Start mirroring: yes (`tapInstructionText`).
 - Unmirrored: the controls panel and every button/label on it, the
-  Script Editor Activity in its entirety, and the file browser Activity
-  in its entirety — `applyMirror()` is only ever called from
-  `MainActivity` and only touches the three views above.
+  Script Editor Activity in its entirety, the file browser Activity in
+  its entirety, `SettingsActivity` in its entirety, the Settings gear,
+  and the full-screen pause menu/end-of-script menu — `applyMirror()` is
+  only ever called from `MainActivity` and only touches the three views
+  above.
 
 ## 17. Start Prompter workflow
 
@@ -1298,8 +1309,14 @@ Prefs name: `teleprompter_prefs` (`AppConstants.PREFS_NAME`). Keys
   = `"horizontal"` or `PROMPTER_ORIENTATION_VERTICAL` = `"vertical"`,
   default `PROMPTER_ORIENTATION_HORIZONTAL`) — see section 32. Same
   write/read split as Text Alignment.
+- `KEY_MIRROR_MODE` (string; `MIRROR_MODE_FLIP` = `"flip"` (default) or
+  `MIRROR_MODE_FLIP_ROTATE` = `"flip_rotate"`) — see section 35. Same
+  write/read split as the other Settings-owned keys; entirely separate
+  from `KEY_MIRROR` (still written only by `mirrorToggle`'s listener and
+  `onPause()`, above) — neither key is ever read or written alongside
+  the other.
 - `KEY_LOAD_LAST_SCRIPT` (boolean, default `true`) — see section 33.
-  Same write/read split as the other two Settings-owned keys.
+  Same write/read split as the other Settings-owned keys.
 
 `savePreferences()` uses `SharedPreferences.Editor.commit()`
 (synchronous), not `apply()`; `SettingsActivity`'s three listeners each
@@ -1395,8 +1412,8 @@ Android 10 (API level 29).
 
 **Awaiting physical verification on the Lenovo**: the Settings screen
 (section 30), Text Alignment (section 31), Prompter Orientation
-(section 32), and Load Last Script on Launch (section 33) have not been
-installed or tested on this device.
+(section 32), Load Last Script on Launch (section 33), and Mirror Mode
+(section 35) have not been installed or tested on this device.
 
 ### ASUS Nexus 7 (2013, second generation)
 
@@ -1427,11 +1444,12 @@ version.
   immersive-sticky system-bar code path (section 22).
 
 **Awaiting physical verification on the Nexus 7**: same as the Lenovo
-above — the Settings screen and its three settings have not been
-installed or tested on this device. In particular, Vertical Prompter
-Orientation on this device would exercise the API 19+ immersive-sticky
-system-bar path (section 22) during the orientation-driven recreation
-(section 32) — an interaction not yet exercised on any device.
+above — the Settings screen and its four settings, including Mirror
+Mode, have not been installed or tested on this device. In particular,
+Vertical Prompter Orientation on this device would exercise the API 19+
+immersive-sticky system-bar path (section 22) during the
+orientation-driven recreation (section 32) — an interaction not yet
+exercised on any device.
 
 ### Acer Iconia Tab A500
 
@@ -1461,8 +1479,9 @@ microSD mount path is among the legacy paths already checked (section
 6).
 
 **Awaiting physical verification on the A500**: the Settings screen and
-its three settings (sections 30–33) have not been installed or tested
-on this device. Vertical Prompter Orientation here would specifically
+its four settings (sections 30–33, 35), including Mirror Mode, have not
+been installed or tested on this device. Vertical Prompter Orientation
+here would specifically
 exercise the API 14–18 legacy system-bar path (section 22) together with
 the orientation-recreation mechanism (section 32) — the combination this
 project can least afford to get wrong unverified, since the A500 is the
@@ -1650,10 +1669,11 @@ while `uiState == CONTROLS` since it lives on `controlsPanel`):
 2. `startActivity(new Intent(MainActivity.this, SettingsActivity.class))`
    — a plain, non-`ForResult` launch. `MainActivity` never needs a
    result code from `SettingsActivity`: every setting saves to
-   `SharedPreferences` immediately (see section 31–33), and `onResume()`
-   already rereads all three on every return from any child Activity
-   (see section 32's orientation discussion for why `onResume()`, not a
-   dedicated `onActivityResult()` case, is the single reread point).
+   `SharedPreferences` immediately (see sections 31–33, 35), and
+   `onResume()` already rereads all four on every return from any child
+   Activity (see section 32's orientation discussion for why
+   `onResume()`, not a dedicated `onActivityResult()` case, is the
+   single reread point).
 
 Nothing else changes: the loaded script, filename, scroll position,
 font size, speed, mirror state, and `uiState` are all left exactly as
@@ -1679,6 +1699,19 @@ system-UI-hiding code. Structure, top to bottom:
   `radioOrientationHorizontal` ("Horizontal") and
   `radioOrientationVertical` ("Vertical").
 - Another divider.
+- **Mirror Mode** section (section 35): the same section-label style,
+  then a *vertical* `RadioGroup` (`mirrorModeGroup`, unlike the two
+  horizontal ones above) with `radioMirrorModeFlip` ("Flip") and
+  `radioMirrorModeFlipRotate` ("Flip and Rotate"), each immediately
+  followed by its own small gray explanatory `TextView`
+  (`settings_mirror_mode_flip_description` /
+  `settings_mirror_mode_flip_rotate_description`, 13sp,
+  `@color/text_light_gray`, indented 36dp to sit under the option's own
+  text rather than its radio circle) — plain `TextView`s interleaved
+  inside the `RadioGroup`, which only manages the check-state of its
+  `RadioButton` children and otherwise behaves as an ordinary vertical
+  `LinearLayout`.
+- Another divider.
 - **Load Last Script on Launch** (section 33): a single `CheckBox`
   (`loadLastScriptCheckBox`), not a `RadioGroup` — simplest correct
   control for a plain on/off setting, per the task's own "CheckBox,
@@ -1695,7 +1728,7 @@ system-UI-hiding code. Structure, top to bottom:
   the Activity on click.
 
 **Save-immediately behavior**: each control's own listener
-(`RadioGroup.OnCheckedChangeListener` ×2,
+(`RadioGroup.OnCheckedChangeListener` ×3,
 `CompoundButton.OnCheckedChangeListener` ×1) writes straight to
 `SharedPreferences` via `commit()` (synchronous, matching
 `MainActivity.savePreferences()`'s existing convention) the instant the
@@ -2166,6 +2199,198 @@ existing `scrollHandler`.
 **Hardware status**: requires physical testing — see section 26. The
 perceived smoothness improvement, in particular, cannot be confirmed by
 source inspection or a successful build alone.
+
+## 35. Mirror Mode
+
+Setting key `KEY_MIRROR_MODE`, values `MIRROR_MODE_FLIP` (default) or
+`MIRROR_MODE_FLIP_ROTATE` (section 24, section 30). Determines *which*
+transformation the pre-existing Mirror On/Off toggle applies while it is
+On — it is a completely separate preference from `KEY_MIRROR` (section
+16): toggling Mirror never touches Mirror Mode, and changing Mirror Mode
+never touches Mirror's own On/Off state or its saved preference.
+
+### The main-screen Mirror button is unchanged
+
+`mirrorToggle` keeps its existing ID, click listener, On/Off behavior,
+and displayed labels ("Mirror: On"/"Mirror: Off") — nothing about it
+changed. It does not display the selected Mirror Mode, does not cycle
+through Mirror Mode choices, and there is no second Mirror button and no
+separate Rotate button anywhere on the main screen. Mirror Mode
+configuration lives exclusively in `SettingsActivity` (section 30).
+
+### Centralized transform: `applyMirror()`
+
+```java
+private void applyMirror() {
+    float scaleX = mirrorEnabled ? -1f : 1f;
+    float scaleY = 1f;
+    float rotation = (mirrorEnabled && AppConstants.MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode))
+            ? 180f : 0f;
+    applyMirrorTransform(scriptText, scaleX, scaleY, rotation);
+    applyMirrorTransform(countdownText, scaleX, scaleY, rotation);
+    applyMirrorTransform(tapInstructionText, scaleX, scaleY, rotation);
+}
+
+private static void applyMirrorTransform(View view, float scaleX, float scaleY, float rotation) {
+    view.setScaleX(scaleX);
+    view.setScaleY(scaleY);
+    view.setRotation(rotation);
+}
+```
+
+This is the single place `mirrorEnabled` and `mirrorMode` are ever
+turned into concrete `scaleX`/`scaleY`/`rotation` values, and the single
+place those values are ever applied — every call recomputes and
+reassigns all three properties on all three presenter-facing views from
+scratch (never a relative `rotationBy()`-style increment), so no call
+site anywhere in `MainActivity` computes its own transform. The three
+per-state outcomes:
+
+| State | `scaleX` | `scaleY` | `rotation` |
+| --- | --- | --- | --- |
+| Mirror Off (any Mirror Mode) | `1.0f` | `1.0f` | `0.0f` |
+| Mirror On + Flip | `-1.0f` | `1.0f` | `0.0f` |
+| Mirror On + Flip and Rotate | `-1.0f` | `1.0f` | `180.0f` |
+
+Flip and Rotate is implemented exactly as the horizontal flip (`Flip`)
+composed with an *additional*, absolute 180-degree rotation — not as a
+differently named "vertical flip" (`scaleY = -1f`), even though a
+horizontal flip plus a 180-degree rotation is mathematically equivalent
+to a vertical-only flip for a symmetric transform. The setting is
+implemented and documented as "Flip and Rotate" throughout, matching
+the actual physical teleprompter mounting it represents (operator
+controls upright, presenter content correctly oriented once reflected)
+rather than an abstract, less meaningful "vertical flip" label.
+
+### Presenter-facing vs. operator-facing
+
+Presenter-facing (transformed together, always identically, by the one
+`applyMirror()` call): `scriptText`, `countdownText`,
+`tapInstructionText`. Confirmed by inspection that these are the only
+three views `applyMirror()` (or any method in `MainActivity`) ever
+calls `setScaleX()`/`setScaleY()`/`setRotation()` on.
+
+Operator-facing (never transformed, confirmed never referenced by
+`applyMirror()` or `applyMirrorTransform()`): `controlsPanel` and every
+control on it (Load Script, New Script, the filename display, Edit
+Script, Start Prompter, Mirror, Exit, Font Size controls, the Speed
+`SeekBar`, Preview/Stop, the Settings gear), `pauseMenuOverlay` and its
+three buttons (Resume, Restart, Back to Controls), the end-of-script
+menu (the same `pauseMenuOverlay`, reused — section 20), all of
+`SettingsActivity`, all of `FileBrowserActivity`, and all of
+`ScriptEditorActivity`.
+
+### No explicit rotation pivot
+
+Neither `setPivotX()` nor `setPivotY()` is ever called anywhere in this
+class. `View`'s own default pivot is already the center of its
+(post-measurement) bounds — true since `View.setRotation()`/
+`setScaleX()`/`setScaleY()` were introduced in API 11, so this default
+has always applied at this project's `minSdkVersion 14` floor — and it
+recomputes automatically whenever the view's measured size changes
+(e.g. a Font Size change), since nothing here ever freezes it. This is
+exactly the centered pivot a 180-degree rotation needs, so no explicit
+post-layout pivot-setting code was necessary.
+
+### Why this can never clip or affect scrolling
+
+A 180-degree rotation, and a horizontal flip, are each individually
+bounds-preserving: rotating a rectangle 180 degrees about its own
+center produces a rectangle of the identical width and height in the
+identical position, and mirroring about a vertical center axis does
+the same — so composing the two never enlarges a transformed view's
+apparent footprint beyond its own untransformed bounds, and content
+can never clip *because of* this transform (only content that would
+already have been clipped without it could still be).
+
+More fundamentally, `setScaleX()`/`setScaleY()`/`setRotation()` are
+draw-time Canvas matrix transforms applied by the `View` framework —
+they never affect that `View`'s measured/laid-out width, height, or
+position, which is what `ScrollView.scrollTo()`, `getScrollY()`, and
+every `maxScroll` calculation in this codebase (sections 14, 19, 34)
+actually operate on. Mirror Mode therefore required **zero** changes
+anywhere in the scrolling/state-machine code: `performScrollTick()`,
+`performPreviewScrollTick()`, `beginActiveScrolling()`,
+`resetToWaitingFromTop()`, `stopScrollingAtEnd()`, and every
+`maxScroll`/`scrollY` calculation are byte-for-byte unchanged by this
+feature. The rendered *pixels* may appear flipped and/or rotated on the
+physical screen, but `scrollY` always still counts up from `0` toward
+the same `maxScroll` it always did, in the same direction, against the
+same untransformed layout coordinates.
+
+### Interaction with Text Alignment
+
+`Gravity` (section 31) positions each line of text *within*
+`scriptText`'s own untransformed layout bounds, before any Canvas
+transform is applied; `applyMirror()`'s `scaleX`/`scaleY`/`rotation`
+then transform that already-gravity-resolved content as a single unit.
+The two operate in entirely different, non-interacting stages of
+rendering — changing Mirror Mode never reads or writes
+`KEY_TEXT_ALIGNMENT`, and changing Text Alignment never reads or writes
+`KEY_MIRROR_MODE` — so every combination (Left/Centered × Off/Flip/Flip
+and Rotate) is automatically correct with no combination-specific code
+anywhere.
+
+### Interaction with Prompter Orientation
+
+Entirely independent (section 32): Mirror Mode never calls
+`setRequestedOrientation()`, never sets `pendingTransition`, and is
+never consulted by `enterFullScreenWaitingFromControls()`/
+`exitFullScreenToControls()`. The Horizontal/Vertical choices themselves
+are untouched — same two options, same preference key, same defaults.
+Because `applyMirror()`'s transform is relative to each view's own
+(post-layout) bounds and center pivot regardless of the Activity's
+actual current orientation, both mirror modes work identically whether
+`scrollView`'s measured dimensions currently reflect landscape or
+portrait — no orientation-conditional branch exists or is needed in
+`applyMirror()`.
+
+### Preview
+
+`scriptText` is the same view in the control-screen preview and every
+full-screen Prompter state (section 14, section 21) — `applyMirror()`
+doesn't distinguish between them, so the preview reflects the active
+Mirror/Mirror Mode combination immediately, the same as it already did
+for the pre-existing Flip-only behavior. Preview's own elapsed-time
+scrolling loop (section 34) reads/writes `scrollView`'s untransformed
+scroll position exactly as before — unaffected by whatever rotation or
+flip is currently applied to what's drawn on screen, per the "why this
+can never clip or affect scrolling" reasoning above.
+
+### Settings-return refresh
+
+`onResume()` now calls `loadDisplayAndStartupPreferences()` (which
+rereads `mirrorMode` among the other three Settings-owned preferences)
+followed immediately by `applyTextAlignment()` and `applyMirror()` — so
+returning from `SettingsActivity` with a newly selected Mirror Mode
+reapplies it right away if Mirror is currently On, and is a harmless
+no-op (still computes the identity transform) if Mirror is currently
+Off. This is the same reread point already used for Text Alignment,
+Prompter Orientation, and Load Last Script on Launch (sections 31–33) —
+no dedicated `onActivityResult()` handling was added for Settings.
+`applyMirror()` touches only `scaleX`/`scaleY`/`rotation` on the three
+presenter-facing views, so this reread can never touch the loaded
+script, scroll position, Preview's running/stopped state, or `uiState`
+— confirmed by inspection that `applyMirror()`/`applyMirrorTransform()`
+call nothing else.
+
+### Persistence and upgrade defaults
+
+`KEY_MIRROR_MODE` defaults to `MIRROR_MODE_FLIP` wherever it is read
+(`loadDisplayAndStartupPreferences()` in `MainActivity`,
+`SettingsActivity.onCreate()`'s initial `RadioButton` selection) — a
+missing/absent preference value always safely resolves to Flip, which
+is the exact pre-existing (and only) Mirror behavior this project had
+before this feature existed. An existing installation upgrading to this
+version therefore sees byte-for-byte identical Mirror behavior with no
+migration, no database, and no reset of `KEY_MIRROR` or any other
+existing preference — `KEY_MIRROR_MODE` is purely additive.
+
+**Hardware status**: requires physical testing — see section 26. Verify
+in particular the six alignment/mode combinations and the six
+orientation/mode combinations this feature spans, on real hardware —
+none of the visual outcomes here can be confirmed by source inspection
+or a successful build alone.
 
 ---
 

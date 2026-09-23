@@ -66,6 +66,20 @@ report the discrepancy before proceeding.
 - Script text, the countdown, and Tap to Start must mirror together via
   `applyMirror()`. Controls, buttons, the editor UI, and the file browser
   must remain unmirrored.
+- `KEY_MIRROR` (Mirror enabled) and `KEY_MIRROR_MODE` are separate
+  preferences — never conflate them. Mirror Mode defaults to Flip.
+  "Flip and Rotate" means the existing horizontal mirror plus an
+  absolute 180-degree rotation (`setRotation(180f)`), not a differently
+  named vertical-flip mode (`scaleY = -1f`), even where the two would be
+  mathematically equivalent. Presenter-facing content (`scriptText`,
+  `tapInstructionText`, `countdownText`) always transforms together,
+  identically, via the one centralized `applyMirror()`. Operator-facing
+  controls and every menu (main controls, Settings, file browser, Script
+  Editor, the pause menu, the end-of-script menu) remain upright and
+  unmirrored regardless of Mirror or Mirror Mode. Mirror Off always
+  resets all three presenter-facing views' `scaleX`/`scaleY`/`rotation`
+  to the identity transform (`1f`/`1f`/`0f`), regardless of the saved
+  Mirror Mode.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.
@@ -170,12 +184,12 @@ report the discrepancy before proceeding.
 - New Script and Edit Script are implemented (`ScriptEditorActivity`,
   `EDITOR_MODE_CREATE_NEW` / `EDITOR_MODE_EDIT_EXISTING`).
 - A Settings screen (`SettingsActivity`) is implemented, opened via the
-  main screen's gear icon (`btnSettings`), with three settings: Text
-  Alignment, Prompter Orientation, and Load Last Script on Launch (keys
-  `KEY_TEXT_ALIGNMENT`/`KEY_PROMPTER_ORIENTATION`/`KEY_LOAD_LAST_SCRIPT`
-  in `AppConstants`). Every control saves immediately; there is no
-  Settings-screen Save button, only Done. See `PROJECT_SPEC.md` sections
-  30–33.
+  main screen's gear icon (`btnSettings`), with four settings: Text
+  Alignment, Prompter Orientation, Mirror Mode, and Load Last Script on
+  Launch (keys `KEY_TEXT_ALIGNMENT`/`KEY_PROMPTER_ORIENTATION`/
+  `KEY_MIRROR_MODE`/`KEY_LOAD_LAST_SCRIPT` in `AppConstants`). Every
+  control saves immediately; there is no Settings-screen Save button,
+  only Done. See `PROJECT_SPEC.md` sections 30–33, 35.
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on
   both `EditText` fields) rather than the keyboard's fullscreen extract
   editor.

@@ -10,6 +10,10 @@ final class AppConstants {
     static final String KEY_LAST_FILE_PATH = "last_file_path";
     static final String KEY_LAST_DIRECTORY = "last_directory";
 
+    static final String KEY_MIRROR_MODE = "mirror_mode";
+    static final String MIRROR_MODE_FLIP = "flip";
+    static final String MIRROR_MODE_FLIP_ROTATE = "flip_rotate";
+
     static final String KEY_TEXT_ALIGNMENT = "text_alignment";
     static final String TEXT_ALIGNMENT_LEFT = "left";
     static final String TEXT_ALIGNMENT_CENTER = "center";

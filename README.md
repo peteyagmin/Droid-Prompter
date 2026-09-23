@@ -37,6 +37,8 @@ this project is developed under, see [`CLAUDE.md`](CLAUDE.md).
 - **Mirror** toggle that horizontally flips only the script text,
   countdown, and "Tap to Start" prompt (for teleprompter glass rigs) —
   buttons, labels, the editor, and the file browser are never mirrored.
+  Mirror stays a simple On/Off quick control; Settings determines
+  whether Mirror On uses Flip or Flip and Rotate (see Settings below).
 - Screen stays awake only while actively auto-scrolling (full-screen or
   Preview); scrolling pauses automatically when the app is backgrounded.
 - A compact gear icon at the far right of the Font Size/Speed row opens
@@ -150,6 +152,12 @@ with your choice already applied.
   normal Android behavior on this project's target API level) — your
   loaded script, its position, and your other settings are all
   preserved through that.
+- **Mirror Mode** — Flip (default, the app's original mirrored display)
+  or Flip and Rotate. This only determines what the main screen's
+  Mirror toggle does while it's On; it doesn't turn Mirror on or off
+  itself. Flip and Rotate is intended for mounting the tablet with the
+  operator's controls upright and readable, while the reflected
+  presenter-facing content stays correctly oriented.
 - **Load Last Script on Launch** — On (default, the app's original
   behavior) automatically reopens the last script you had loaded each
   time you start the app. Off starts every launch with no script loaded

@@ -111,6 +111,66 @@
                 android:clickable="false"
                 android:focusable="false" />
 
+            <!-- Mirror Mode -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/settings_section_mirror_mode"
+                android:textColor="@color/accent_amber"
+                android:textSize="18sp" />
+
+            <RadioGroup
+                android:id="@+id/mirrorModeGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp">
+
+                <RadioButton
+                    android:id="@+id/radioMirrorModeFlip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_mirror_mode_flip"
+                    android:textColor="@color/text_white"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="36dp"
+                    android:layout_marginLeft="36dp"
+                    android:layout_marginBottom="8dp"
+                    android:text="@string/settings_mirror_mode_flip_description"
+                    android:textColor="@color/text_light_gray"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/radioMirrorModeFlipRotate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_mirror_mode_flip_rotate"
+                    android:textColor="@color/text_white"
+                    android:textSize="16sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="36dp"
+                    android:layout_marginLeft="36dp"
+                    android:text="@string/settings_mirror_mode_flip_rotate_description"
+                    android:textColor="@color/text_light_gray"
+                    android:textSize="13sp" />
+            </RadioGroup>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="@dimen/adjustment_divider_width"
+                android:background="@color/divider_color"
+                android:layout_marginTop="20dp"
+                android:layout_marginBottom="20dp"
+                android:clickable="false"
+                android:focusable="false" />
+
             <!-- Load Last Script on Launch -->
             <CheckBox
                 android:id="@+id/loadLastScriptCheckBox"

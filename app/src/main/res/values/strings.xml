@@ -40,6 +40,11 @@
     <string name="settings_section_prompter_orientation">Prompter Orientation</string>
     <string name="settings_orientation_horizontal">Horizontal</string>
     <string name="settings_orientation_vertical">Vertical</string>
+    <string name="settings_section_mirror_mode">Mirror Mode</string>
+    <string name="settings_mirror_mode_flip">Flip</string>
+    <string name="settings_mirror_mode_flip_description">Standard teleprompter-glass display</string>
+    <string name="settings_mirror_mode_flip_rotate">Flip and Rotate</string>
+    <string name="settings_mirror_mode_flip_rotate_description">Use when the tablet is mounted with the controls upright</string>
     <string name="settings_section_load_last_script">Load Last Script on Launch</string>
     <string name="btn_settings_done">Done</string>
 

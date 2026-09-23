@@ -12,11 +12,14 @@ import android.widget.RadioGroup;
 
 /**
  * A plain platform-Views settings screen: Text Alignment, Prompter
- * Orientation, and Load Last Script on Launch. Remains landscape (see
- * AndroidManifest.xml) and keeps normal status/navigation bars throughout --
- * it is never a full-screen Prompter state. Every control saves to
- * SharedPreferences immediately on change, so there is no separate Save
- * step and no unsaved-changes state to protect on Back/Done.
+ * Orientation, Mirror Mode, and Load Last Script on Launch. Remains
+ * landscape (see AndroidManifest.xml) and keeps normal status/navigation
+ * bars throughout -- it is never a full-screen Prompter state. Every
+ * control saves to SharedPreferences immediately on change, so there is
+ * no separate Save step and no unsaved-changes state to protect on
+ * Back/Done. Mirror Mode only configures the transformation the main
+ * screen's existing Mirror toggle applies when On -- it never enables or
+ * disables Mirror itself (see MainActivity.applyMirror()).
  */
 public class SettingsActivity extends Activity {
 
@@ -33,6 +36,9 @@ public class SettingsActivity extends Activity {
         RadioGroup prompterOrientationGroup = (RadioGroup) findViewById(R.id.prompterOrientationGroup);
         RadioButton radioOrientationHorizontal = (RadioButton) findViewById(R.id.radioOrientationHorizontal);
         RadioButton radioOrientationVertical = (RadioButton) findViewById(R.id.radioOrientationVertical);
+        RadioGroup mirrorModeGroup = (RadioGroup) findViewById(R.id.mirrorModeGroup);
+        RadioButton radioMirrorModeFlip = (RadioButton) findViewById(R.id.radioMirrorModeFlip);
+        RadioButton radioMirrorModeFlipRotate = (RadioButton) findViewById(R.id.radioMirrorModeFlipRotate);
         CheckBox loadLastScriptCheckBox = (CheckBox) findViewById(R.id.loadLastScriptCheckBox);
         Button btnDone = (Button) findViewById(R.id.btnSettingsDone);
 
@@ -49,6 +55,13 @@ public class SettingsActivity extends Activity {
             radioOrientationVertical.setChecked(true);
         } else {
             radioOrientationHorizontal.setChecked(true);
+        }
+
+        String mirrorMode = prefs.getString(AppConstants.KEY_MIRROR_MODE, AppConstants.MIRROR_MODE_FLIP);
+        if (AppConstants.MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode)) {
+            radioMirrorModeFlipRotate.setChecked(true);
+        } else {
+            radioMirrorModeFlip.setChecked(true);
         }
 
         loadLastScriptCheckBox.setChecked(prefs.getBoolean(AppConstants.KEY_LOAD_LAST_SCRIPT, true));
@@ -71,6 +84,17 @@ public class SettingsActivity extends Activity {
                         ? AppConstants.PROMPTER_ORIENTATION_VERTICAL : AppConstants.PROMPTER_ORIENTATION_HORIZONTAL;
                 SharedPreferences.Editor editor = prefs.edit();
                 editor.putString(AppConstants.KEY_PROMPTER_ORIENTATION, value);
+                editor.commit();
+            }
+        });
+
+        mirrorModeGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(RadioGroup group, int checkedId) {
+                String value = checkedId == R.id.radioMirrorModeFlipRotate
+                        ? AppConstants.MIRROR_MODE_FLIP_ROTATE : AppConstants.MIRROR_MODE_FLIP;
+                SharedPreferences.Editor editor = prefs.edit();
+                editor.putString(AppConstants.KEY_MIRROR_MODE, value);
                 editor.commit();
             }
         });

@@ -155,6 +155,7 @@ public class MainActivity extends Activity {
     private int pendingRestoreScrollY = -1;
     private String textAlignment = AppConstants.TEXT_ALIGNMENT_LEFT;
     private boolean prompterOrientationVertical = false;
+    private String mirrorMode = AppConstants.MIRROR_MODE_FLIP;
     private boolean loadLastScriptOnLaunch = true;
     private PendingTransition pendingTransition = PendingTransition.NONE;
 
@@ -419,13 +420,15 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // MainActivity must reread Text Alignment, Prompter Orientation, and
-        // Load Last Script on Launch after returning from Settings; onResume()
-        // already runs on every return from any child Activity (and from the
-        // background), so re-reading here -- rather than wiring a dedicated
-        // result path just for Settings -- covers that requirement for free.
+        // MainActivity must reread Text Alignment, Prompter Orientation,
+        // Mirror Mode, and Load Last Script on Launch after returning from
+        // Settings; onResume() already runs on every return from any child
+        // Activity (and from the background), so re-reading here -- rather
+        // than wiring a dedicated result path just for Settings -- covers
+        // that requirement for free.
         loadDisplayAndStartupPreferences();
         applyTextAlignment();
+        applyMirror();
         if (pendingTransition == PendingTransition.ENTER_PROMPTER) {
             continueEnterPrompter();
         } else if (pendingTransition == PendingTransition.EXIT_TO_CONTROLS) {
@@ -644,17 +647,22 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The three Settings-screen preferences, factored out of loadPreferences()
+     * The four Settings-screen preferences, factored out of loadPreferences()
      * so onResume() can reread just these -- MainActivity never writes any of
-     * the three itself (only SettingsActivity does, saving immediately on
+     * the four itself (only SettingsActivity does, saving immediately on
      * each change), so there is nothing here to reconcile with in-memory
-     * state the way font size/speed/mirror/loadedFilePath need.
+     * state the way font size/speed/mirror-enabled/loadedFilePath need.
+     * Mirror Mode (unlike the other three) has no direct visibility effect
+     * of its own here -- callers must still call applyMirror() afterward to
+     * actually apply it, same as callers of the other three still call
+     * applyTextAlignment()/etc. separately.
      */
     private void loadDisplayAndStartupPreferences() {
         textAlignment = prefs.getString(AppConstants.KEY_TEXT_ALIGNMENT, AppConstants.TEXT_ALIGNMENT_LEFT);
         prompterOrientationVertical = AppConstants.PROMPTER_ORIENTATION_VERTICAL.equals(
                 prefs.getString(AppConstants.KEY_PROMPTER_ORIENTATION,
                         AppConstants.PROMPTER_ORIENTATION_HORIZONTAL));
+        mirrorMode = prefs.getString(AppConstants.KEY_MIRROR_MODE, AppConstants.MIRROR_MODE_FLIP);
         loadLastScriptOnLaunch = prefs.getBoolean(AppConstants.KEY_LOAD_LAST_SCRIPT, true);
     }
 
@@ -1417,11 +1425,51 @@ public class MainActivity extends Activity {
         fontSizeLabel.setText(getString(R.string.font_size_label, (int) fontSizeSp));
     }
 
+    /**
+     * The single centralized place presenter-facing content's mirror
+     * transform is computed and applied -- scriptText, tapInstructionText,
+     * and countdownText always receive the exact same scaleX/scaleY/
+     * rotation, so they can never diverge. Every value is absolute, never
+     * a relative increment (no rotationBy()-style call anywhere in this
+     * class), so switching Mirror off, or switching Mirror Mode while
+     * Mirror stays on, can never leave a stale transform behind -- each
+     * call fully recomputes and reassigns all three properties from
+     * mirrorEnabled/mirrorMode's current values.
+     *
+     * Mirror Off (mirrorEnabled == false): scaleX=1, scaleY=1, rotation=0
+     * -- the identity transform, regardless of mirrorMode, which stays
+     * saved but inactive.
+     * Mirror On + Flip (the pre-existing, default behavior): scaleX=-1,
+     * scaleY=1, rotation=0 -- a horizontal-only flip.
+     * Mirror On + Flip and Rotate: scaleX=-1, scaleY=1, rotation=180 --
+     * the same horizontal flip, composed with an absolute 180-degree
+     * rotation (not a different scaleY-based "vertical flip" mode).
+     *
+     * No explicit pivot is ever set: View's default pivot is already the
+     * center of its own bounds once measured, which is exactly what a
+     * centered 180-degree rotation needs, and it recomputes automatically
+     * as the view's measured size changes (e.g. a Font Size change) since
+     * nothing here ever freezes it with setPivotX()/setPivotY(). A 180-
+     * degree rotation combined with a horizontal flip also never changes
+     * a view's own bounding box, so this can never clip content within
+     * its own view -- and since these are draw-time Canvas transforms,
+     * not layout changes, ScrollView's scrollY/scroll-direction logic is
+     * entirely unaffected regardless of what's visually rendered.
+     */
     private void applyMirror() {
         float scaleX = mirrorEnabled ? -1f : 1f;
-        scriptText.setScaleX(scaleX);
-        countdownText.setScaleX(scaleX);
-        tapInstructionText.setScaleX(scaleX);
+        float scaleY = 1f;
+        float rotation = (mirrorEnabled && AppConstants.MIRROR_MODE_FLIP_ROTATE.equals(mirrorMode))
+                ? 180f : 0f;
+        applyMirrorTransform(scriptText, scaleX, scaleY, rotation);
+        applyMirrorTransform(countdownText, scaleX, scaleY, rotation);
+        applyMirrorTransform(tapInstructionText, scaleX, scaleY, rotation);
+    }
+
+    private static void applyMirrorTransform(View view, float scaleX, float scaleY, float rotation) {
+        view.setScaleX(scaleX);
+        view.setScaleY(scaleY);
+        view.setRotation(rotation);
     }
 
     /**
