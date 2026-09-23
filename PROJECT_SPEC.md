@@ -3,16 +3,17 @@
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
-**Documented as of commit `6a82e01`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for a new Settings
-screen on top of it: a compact gear-icon control on the main screen
-(section 4, section 30) opening `SettingsActivity` with three settings —
-Text Alignment (section 31), Prompter Orientation (section 32, which can
-recreate `MainActivity` on API 14 to switch between landscape and
-portrait full-screen Prompter mode), and Load Last Script on Launch
-(section 33). The commit that lands this update is necessarily newer
-than `6a82e01`; that commit's hash is reported separately at the end of
-the task that made these changes, not inferred here.
+**Documented as of commit `5c3e010`** (branch
+`claude/android-teleprompter-app-1wfqsr`, which added the Settings
+screen described in section 30), updated for two focused visual
+refinements to the adjustment row on top of it: replacing the Settings
+gear artwork with a clearer, user-supplied outlined gear (a visible
+center hole, section 30), and fixing the Font Size group's layout
+weighting so the first divider no longer sits behind a large blank gap
+after `A+` (section 30). The commit that lands this update is
+necessarily newer than `5c3e010`; that commit's hash is reported
+separately at the end of the task that made these changes, not inferred
+here.
 
 Throughout this document:
 
@@ -1521,6 +1522,20 @@ adjustment_divider_vertical_margin` vertical), `clickable="false"`, and
 copy, not a shared style, matching how the first divider was already
 written inline. Neither divider carries an `android:id`.
 
+**Row width allocation**: the Font Size group is `android:layout_width=
+"wrap_content"` with no `layout_weight` — it takes exactly the width its
+label/`A-`/value/`A+` need, so the first divider sits immediately after
+`A+` at its intended 12dp margin, with no blank trailing gap. Only the
+Speed group carries `layout_weight="1"` (changed from the original
+`38`/`59` split between the two groups): as the row's one remaining
+flexible-width sibling, it claims all the space left over after the
+now-`wrap_content` Font Size group, both fixed-width dividers, and the
+fixed 56dp Settings button are accounted for. Inside the Speed group,
+`speedSeekBar` still carries its own `layout_weight="1"` to expand
+within that group — this was already the mechanism that kept Preview
+flush against the second divider with no gap, and is why only the Font
+Size side needed fixing.
+
 `btnSettings` is an `ImageButton`, not a full-size text button: no
 visible "Settings" label appears on the main screen, only the icon.
 
@@ -1543,15 +1558,22 @@ visible "Settings" label appears on the main screen, only the icon.
 - `applyMirror()` never includes `btnSettings` in its `scaleX` list, so
   the icon is never mirrored regardless of the Mirror setting.
 
-**Gear icon artwork** (`ic_settings.png`): a plain white (`#FFFFFFFF`),
-8-tooth gear silhouette generated programmatically (Python/Pillow,
-supersampled and downsampled for anti-aliased edges), no center hole
-(a hole would blur away at these sizes), no text, high contrast against
-the app's black/dark-gray interface. A PNG, not a vector drawable — API
-14 has no `VectorDrawable` support without an AndroidX compat shim,
-which is prohibited. Provided at five density buckets, each a plain
-raster PNG at the same design (no `-v4`/adaptive-icon complexity used
-for the launcher icon):
+**Gear icon artwork** (`ic_settings.png`): a white, outlined 8-tooth gear
+with a clearly visible open center hole, transparent background, no
+text, high contrast against the app's black/dark-gray interface. A PNG,
+not a vector drawable — API 14 has no `VectorDrawable` support without
+an AndroidX compat shim, which is prohibited. Sourced from a
+user-supplied 512×512 RGBA PNG (already square, artwork extending to
+all four canvas edges with no built-in transparent padding of its own —
+the button's existing 12dp `android:padding` supplies that instead, so
+none was added to the source), downsampled with Pillow's `LANCZOS`
+filter to each density's exact target size, preserving the original
+artwork, proportions, and transparency unmodified — no stretching,
+cropping, or redrawing. This replaced an earlier programmatically
+generated gear (a solid silhouette with no center hole, which read as
+less clearly gear-like at small sizes) from the previous round. Provided
+at five density buckets, each a plain raster PNG at the same design (no
+`-v4`/adaptive-icon complexity used for the launcher icon):
 
 | Folder | Size |
 | --- | --- |
