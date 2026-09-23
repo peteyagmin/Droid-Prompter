@@ -23,6 +23,18 @@ it. The commit that lands this update is necessarily newer than
 `13abf34`; that commit's hash is reported separately at the end of the
 task that made these changes, not inferred here.
 
+**A further round** (commit `a0a3088` and newer) fixed a second,
+separate bug found by physical testing of the reverse-scrolling round
+above: Mirror On + Flip and Rotate's opening buffer was missing — the
+first script line rendered near the top of the viewport instead of at
+the same ~77.5%-down position Mirror Off/Flip use. The reverse-mode
+padding formula itself was algebraically correct; the bug was that
+`computeMaxScroll()` was being read before `scriptText`'s padding-driven
+re-layout had reliably finished on this project's older/slower target
+hardware. `scrollToScriptStartReliably()` fixes this with a bounded,
+self-correcting re-verification — see "Physically observed: missing
+reverse-mode opening buffer, and its fix" under section 35.
+
 Throughout this document:
 
 - **Physically tested** means the user reported running the built APK on
@@ -2456,9 +2468,12 @@ that minimal padding differs by direction (below).
 Every Preview press still resets to the *visual* beginning, preserving
 the existing "reset to top" behavior (section 14). `startPreviewScrolling()`
 applies minimal padding, waits for layout via `scrollView.post()`, then
-scrolls to `getScriptStartScrollY(computeMaxScroll())` instead of a
-hardcoded `scrollTo(0, 0)` — `0` in Mirror Off/Flip (unchanged), or the
-freshly measured `maxScroll` in Flip and Rotate. `performPreviewScrollTick()`
+calls `scrollToScriptStartReliably()` (below) instead of a hardcoded
+`scrollTo(0, 0)` — landing at `0` in Mirror Off/Flip (unchanged), or the
+reliably-measured `maxScroll` in Flip and Rotate; Preview's accumulator/
+baseline reset and first-tick post are deferred to that call's
+`afterPositioned` callback so they only run once the position is
+confirmed. `performPreviewScrollTick()`
 uses `moveTowardScriptEnd()`/`hasReachedScriptEnd()` as above: Preview
 reaches its end at `scrollY >= maxScroll` (normal/Flip) or `scrollY <= 0`
 (Flip and Rotate), then `stopPreviewScrolling()` runs exactly once,
@@ -2477,16 +2492,74 @@ orientation → hide bars → wait for layout → apply normal opening/
 trailing padding → wait for layout → `scrollTo(0, 0)` →
 `WAITING_FOR_TAP` — unchanged. Flip and Rotate: the same sequence, but
 `applyFullScreenScriptPadding()` applies the reverse-mode fractions
-above, and the final step scrolls to `getScriptStartScrollY(computeMaxScroll())`
-— `maxScroll`, computed only after the reverse-mode padding change has
-itself been laid out, so the measurement is accurate. Neither branch
-starts a countdown or scrolling automatically; both still require a Tap
-to Start. Full-screen scrolling reaches its end via the same
-`hasReachedScriptEnd()` check as Preview (`scrollY <= 0` in reverse
-mode), routing through the existing `stopScrollingAtEnd()` →
-`END_OF_SCRIPT_WAITING` path exactly once either way — the final text
-stays unobstructed until a tap reveals the reduced Restart/Back to
-Controls menu (section 20), unchanged.
+above, and the final step scrolls to the reverse-mode `maxScroll` via
+`scrollToScriptStartReliably()` (below) rather than a direct
+`scrollTo()`. Neither branch starts a countdown or scrolling
+automatically; both still require a Tap to Start. Full-screen scrolling
+reaches its end via the same `hasReachedScriptEnd()` check as Preview
+(`scrollY <= 0` in reverse mode), routing through the existing
+`stopScrollingAtEnd()` → `END_OF_SCRIPT_WAITING` path exactly once
+either way — the final text stays unobstructed until a tap reveals the
+reduced Restart/Back to Controls menu (section 20), unchanged.
+
+### Physically observed: missing reverse-mode opening buffer, and its fix
+
+Physical hardware testing of the reverse-scrolling fix above (direction,
+start/end, Pause/Resume) confirmed it correct, but found a *second*,
+separate bug: in Mirror On + Flip and Rotate, the first script line was
+appearing near the **top** of the full-screen viewport instead of at the
+same ~77.5%-down opening position Mirror Off/Flip use — the intended
+opening buffer was effectively missing. The algebraic derivation above
+(under "Reverse-mode full-screen padding") was re-verified and is
+correct on its own terms — `getScriptStartScrollY()` == `maxScroll`, and
+the reverse-mode top-padding fraction (`1 − OPENING_SPACE_FRACTION`)
+does place the first line at 77.5% down *given an accurate `maxScroll`
+at the moment `scrollTo()` runs*. The bug is not in that formula; it is
+that `maxScroll` (`computeMaxScroll()` = `scriptText.getHeight() −
+scrollView.getHeight()`) was being read too early relative to
+`applyFullScreenScriptPadding()`'s own effect on `scriptText`'s measured
+height.
+
+Mirror Off/Flip's target scroll position, `scrollTo(0, 0)`, never
+depends on any measurement at all — it is valid to call the instant it's
+reached, regardless of whether `scriptText`'s padding-driven re-layout
+has actually finished. That is exactly why only the reverse-mode opening
+position was ever affected: it is the one case whose target
+(`maxScroll`) is measurement-dependent. The existing single
+`scrollView.post()` after `applyFullScreenScriptPadding()` (the same
+"wait one settle-frame" pattern already used, and already sufficient,
+for the system-bar-hide's own layout change) was not reliably enough on
+this project's older/slower target hardware for the reverse-mode
+padding change specifically — a much larger change (top + bottom padding
+together can reach ~82.5% of the viewport height) than the system-bar
+inset change the existing pattern was originally sized for.
+
+**Fix**: `scrollToScriptStartReliably(afterPositioned)` replaces the
+direct `scrollTo(0, getScriptStartScrollY(computeMaxScroll()))` call at
+both of this codebase's two script-start call sites
+(`resetToWaitingFromTop()`, and Preview's `startPreviewScrolling()`).
+It scrolls once using whatever `computeMaxScroll()` reports immediately,
+then waits one further settled frame and recomputes `maxScroll`; if the
+recomputed value differs from the first attempt (meaning the first
+measurement was indeed stale), it re-scrolls to the corrected position.
+A single bounded correction pass, never a loop or an unbounded retry —
+and a harmless no-op whenever the first measurement was already
+accurate (including every Mirror Off/Flip case, where both attempts
+trivially agree on `0`). `afterPositioned` (nullable) runs only once the
+position is confirmed, so `startPreviewScrolling()` can defer resetting
+`previewScrollRemainderPx`/`previewScrollLastTickUptimeMs` and posting
+Preview's first tick until the corrected position is actually in place,
+rather than racing the correction.
+
+This is a measurement-reliability fix, not a geometry change: the
+padding fractions (`0.225`/`0.6` derived above) and
+`applyFullScreenScriptPadding()` itself are unchanged; only *how
+reliably* the resulting `maxScroll` is read before scrolling to it
+changed. `loadScriptFile()`'s own (CONTROLS-preview, not full-screen)
+use of `getScriptStartScrollY(computeMaxScroll())` was left as a direct
+call, unchanged — not reported affected by this bug, and a lower-stakes
+context (a freshly loaded script's initial preview position, not an
+opening buffer the presenter reads from).
 
 ### Pause and Resume in reverse mode
 
@@ -2678,7 +2751,18 @@ made from CONTROLS repositions the preview to the correct end rather
 than leaving it reversed. None of this can be confirmed by source
 inspection or a successful build alone — the algebraic derivation above
 gives high confidence in the formulas, but only physical hardware can
-confirm the actual rendered geometry.
+confirm the actual rendered geometry. This is exactly how the missing
+reverse-mode opening buffer described above was originally caught: the
+formula was algebraically sound but a measurement-timing gap only
+surfaced on physical (older/slower) hardware. The `scrollToScriptStartReliably()`
+fix requires the same physical re-confirmation before it can be
+considered verified — specifically that, under Mirror On + Flip and
+Rotate, the first line now lands at ~77.5% down the viewport on both
+Start Prompter and Restart, in both Horizontal and Vertical Prompter
+Orientation, at both small and large font sizes, and on both short and
+long scripts — not merely that the build succeeds and the formula
+checks out on paper (as the previous round's build also did, before
+this bug was found).
 
 ---
 
@@ -2712,3 +2796,14 @@ changes anywhere in the scrolling/state-machine code" — was itself a
 discrepancy: true only of `scrollY`'s raw numeric mechanics, not of
 whether direction-aware logic was needed on top of them. Corrected in
 place in section 35 rather than left standing.
+
+A still later round found that the reverse-scrolling fix's own
+"algebraic derivation" for the reverse-mode padding fractions, while
+mathematically correct on its own terms, had not accounted for
+measurement-timing reliability on physical hardware — physical testing
+found the resulting opening position wrong in practice despite the
+formula checking out on paper. Documented and fixed in section 35 under
+"Physically observed: missing reverse-mode opening buffer, and its fix"
+rather than left standing; a reminder that "verified by inspection" and
+"physically tested" (as this document defines both terms above) are not
+interchangeable, even for a change whose algebra has been checked twice.

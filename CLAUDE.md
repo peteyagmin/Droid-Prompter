@@ -101,6 +101,15 @@ report the discrepancy before proceeding.
   direction (`remapScrollPositionForMirrorModeChange()`) rather than
   leaving it at the wrong end. Operator-facing controls stay upright and
   untransformed regardless of scroll direction.
+- Flip and Rotate must preserve the same visual opening position as
+  normal and Flip modes: the first line begins approximately 77.5
+  percent down the measured full-screen viewport. Reverse mode's target
+  scroll position (`maxScroll`) is measurement-dependent in a way Mirror
+  Off/Flip's `scrollTo(0, 0)` never is, so always reach it through
+  `scrollToScriptStartReliably()` (not a direct `scrollTo()`), which
+  self-corrects once if the padding-driven re-layout hadn't settled by
+  the first measurement — this project's older/slower target hardware
+  has been observed needing it.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.

@@ -843,6 +843,46 @@ public class MainActivity extends Activity {
     }
 
     /**
+     * Scrolls to the script's visual beginning (getScriptStartScrollY()),
+     * reliably even when the padding change just applied by the caller
+     * (applyFullScreenScriptPadding() or the minimal Preview padding)
+     * needs more than the single settle-frame already waited for elsewhere
+     * in this class to fully re-layout scriptText -- physical testing on
+     * this project's older/slower target hardware found Flip and Rotate's
+     * opening position landing wrong specifically because computeMaxScroll()
+     * was read from a scriptText height that hadn't finished catching up
+     * to the just-applied padding yet (Mirror Off/Flip's own target,
+     * scrollTo(0, 0), never depended on that measurement at all, which is
+     * why only the reverse-mode opening position was ever affected).
+     *
+     * Scrolls once from whatever computeMaxScroll() reports right now,
+     * then re-checks on the very next settled frame and re-scrolls only if
+     * that recomputed maxScroll actually differs -- a single bounded
+     * correction pass, never a loop, and a harmless no-op on any frame
+     * where the first measurement was already correct. afterPositioned
+     * (may be null) runs only once the position is confirmed, so a caller
+     * that must not act on a possibly-still-wrong position (e.g. resetting
+     * Preview's scrolling accumulator/baseline) can defer that action here
+     * instead of racing this correction.
+     */
+    private void scrollToScriptStartReliably(final Runnable afterPositioned) {
+        final int firstAttemptMaxScroll = computeMaxScroll();
+        scrollView.scrollTo(0, getScriptStartScrollY(firstAttemptMaxScroll));
+        scrollView.post(new Runnable() {
+            @Override
+            public void run() {
+                int settledMaxScroll = computeMaxScroll();
+                if (settledMaxScroll != firstAttemptMaxScroll) {
+                    scrollView.scrollTo(0, getScriptStartScrollY(settledMaxScroll));
+                }
+                if (afterPositioned != null) {
+                    afterPositioned.run();
+                }
+            }
+        });
+    }
+
+    /**
      * Centralized script-padding switch used whenever uiState crosses the
      * CONTROLS / full-screen boundary in the direction that should keep the
      * same passage on screen (exitFullScreenToControls()). scriptText's XML
@@ -1121,6 +1161,19 @@ public class MainActivity extends Activity {
      * height-measurement post() specifically to let that bar-hide's own
      * layout pass settle first -- a single bounded extra frame, not a
      * loop -- before scrollView.getHeight() is trusted.
+     *
+     * The final scroll-to-start step goes through
+     * scrollToScriptStartReliably() rather than a direct scrollTo() call:
+     * Mirror Off/Flip's own target (scrollTo(0, 0)) never depended on any
+     * measurement, so it was always correct the instant this method's
+     * single post()-after-padding settled -- but Flip and Rotate's target
+     * (getScriptStartScrollY() == maxScroll) does depend on scriptText's
+     * post-padding measured height, and physical testing on this project's
+     * older/slower target hardware found that single settle-frame
+     * sometimes insufficient for that specific (large, ~82.5%-of-viewport)
+     * padding change to fully land before it was read -- landing the
+     * opening position too high. scrollToScriptStartReliably() re-verifies
+     * on one further settled frame and self-corrects only if needed.
      */
     private void resetToWaitingFromTop() {
         scrollHandler.removeCallbacksAndMessages(null);
@@ -1145,7 +1198,7 @@ public class MainActivity extends Activity {
                         scrollView.post(new Runnable() {
                             @Override
                             public void run() {
-                                scrollView.scrollTo(0, getScriptStartScrollY(computeMaxScroll()));
+                                scrollToScriptStartReliably(null);
                             }
                         });
                     }
@@ -1429,10 +1482,17 @@ public class MainActivity extends Activity {
                 if (!previewScrolling || uiState != UiState.CONTROLS) {
                     return;
                 }
-                scrollView.scrollTo(0, getScriptStartScrollY(computeMaxScroll()));
-                previewScrollRemainderPx = 0f;
-                previewScrollLastTickUptimeMs = SystemClock.uptimeMillis();
-                scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+                scrollToScriptStartReliably(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!previewScrolling || uiState != UiState.CONTROLS) {
+                            return;
+                        }
+                        previewScrollRemainderPx = 0f;
+                        previewScrollLastTickUptimeMs = SystemClock.uptimeMillis();
+                        scrollHandler.postDelayed(previewScrollRunnable, SCROLL_INTERVAL_MS);
+                    }
+                });
             }
         });
     }
