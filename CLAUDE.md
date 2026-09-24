@@ -103,13 +103,23 @@ report the discrepancy before proceeding.
   untransformed regardless of scroll direction.
 - Flip and Rotate must preserve the same visual opening position as
   normal and Flip modes: the first line begins approximately 77.5
-  percent down the measured full-screen viewport. Reverse mode's target
-  scroll position (`maxScroll`) is measurement-dependent in a way Mirror
-  Off/Flip's `scrollTo(0, 0)` never is, so always reach it through
-  `scrollToScriptStartReliably()` (not a direct `scrollTo()`), which
-  self-corrects once if the padding-driven re-layout hadn't settled by
-  the first measurement — this project's older/slower target hardware
-  has been observed needing it.
+  percent down the measured full-screen viewport, and the final line
+  settles at the same ~60%-down position as normal/Flip. In
+  `applyFullScreenScriptPadding()`, reverse mode's top/bottom padding
+  fractions are `OPENING_SPACE_FRACTION`/`END_SPACE_FRACTION` with the
+  two sides **exchanged** (reverse top = `END_SPACE_FRACTION`, reverse
+  bottom = `OPENING_SPACE_FRACTION`) — physically confirmed. A prior,
+  algebraically-derived **complement** formula (`1 -
+  OPENING_SPACE_FRACTION`/`1 - END_SPACE_FRACTION`) looked
+  self-consistent on paper but physical testing found it wrong; do not
+  reintroduce it without new physical confirmation. Reverse mode's
+  target scroll position (`maxScroll`) is also measurement-dependent in
+  a way Mirror Off/Flip's `scrollTo(0, 0)` never is, so always reach it
+  through `scrollToScriptStartReliably()` (not a direct `scrollTo()`),
+  which self-corrects once if the padding-driven re-layout hadn't
+  settled by the first measurement. This is a separate concern from the
+  padding mapping above (which side governs the opening space) — fixing
+  one does not fix the other, as this project's history shows.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.

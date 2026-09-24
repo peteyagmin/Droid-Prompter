@@ -729,23 +729,28 @@ public class MainActivity extends Activity {
      * Normal/Flip: top/bottom padding are OPENING_SPACE_FRACTION/
      * END_SPACE_FRACTION of the viewport, exactly as before this feature.
      *
-     * Flip and Rotate: the 180-degree rotation (applyMirror()) is a pure
-     * draw-time transform about scriptText's own center, which -- combined
-     * with ScrollView clipping to an untransformed scrollY window -- makes
-     * the *rendered* content within that window a top/bottom mirror image
-     * of what scrollY alone would suggest (see PROJECT_SPEC.md section 35
-     * for the full derivation). Swapping which fraction drives which edge
-     * -- top padding becomes (1 - OPENING_SPACE_FRACTION) of the viewport,
-     * bottom padding becomes (1 - END_SPACE_FRACTION) -- exactly cancels
-     * that inversion, so the first line still opens at the same on-screen
-     * height, and the final line still settles at the same on-screen
-     * height, as in Flip/Mirror Off. Verified algebraically, not applied
-     * blindly: see the derivation referenced above.
+     * Flip and Rotate: the 180-degree rotation (applyMirror()) makes the
+     * rendered content within a given scrollY window a top/bottom mirror
+     * image of what scrollY alone would suggest, so logical *bottom*
+     * padding becomes the visual opening space at the reverse start
+     * position (scrollY == maxScroll), and logical *top* padding becomes
+     * the visual trailing space at the reverse end (scrollY == 0) -- the
+     * sides are exchanged, not complemented. Reverse-mode top padding is
+     * therefore END_SPACE_FRACTION of the viewport, and reverse-mode
+     * bottom padding is OPENING_SPACE_FRACTION of the viewport, so that at
+     * the reverse start the first line opens at the same on-screen height,
+     * and at the reverse end the final line settles at the same on-screen
+     * height, as in Flip/Mirror Off. An earlier version of this method
+     * used complement fractions (1 - OPENING_SPACE_FRACTION, 1 -
+     * END_SPACE_FRACTION); physical testing found that formula did not
+     * produce the intended opening position (see PROJECT_SPEC.md section
+     * 35) -- this direct side-exchange is the physically confirmed
+     * mapping, not the complement.
      */
     private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
         int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        float topFraction = isReverseScrollMode() ? (1.0f - OPENING_SPACE_FRACTION) : OPENING_SPACE_FRACTION;
-        float bottomFraction = isReverseScrollMode() ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
+        float topFraction = isReverseScrollMode() ? END_SPACE_FRACTION : OPENING_SPACE_FRACTION;
+        float bottomFraction = isReverseScrollMode() ? OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
         int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
         int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
         applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
@@ -847,13 +852,16 @@ public class MainActivity extends Activity {
      * reliably even when the padding change just applied by the caller
      * (applyFullScreenScriptPadding() or the minimal Preview padding)
      * needs more than the single settle-frame already waited for elsewhere
-     * in this class to fully re-layout scriptText -- physical testing on
-     * this project's older/slower target hardware found Flip and Rotate's
-     * opening position landing wrong specifically because computeMaxScroll()
-     * was read from a scriptText height that hadn't finished catching up
-     * to the just-applied padding yet (Mirror Off/Flip's own target,
-     * scrollTo(0, 0), never depended on that measurement at all, which is
-     * why only the reverse-mode opening position was ever affected).
+     * in this class to fully re-layout scriptText on this project's
+     * older/slower target hardware. Mirror Off/Flip's own target,
+     * scrollTo(0, 0), never depends on that measurement at all, so this
+     * exists purely as a bounded safeguard for the one target
+     * (getScriptStartScrollY() == maxScroll in reverse mode) that does --
+     * a genuinely stale measurement here would show as the opening
+     * position drifting toward the wrong end, not the specific
+     * wrong-padding-mapping symptom that turned out to be this class's
+     * actual Flip and Rotate opening-buffer defect (see
+     * applyFullScreenScriptPadding()'s doc comment).
      *
      * Scrolls once from whatever computeMaxScroll() reports right now,
      * then re-checks on the very next settled frame and re-scrolls only if
@@ -1164,16 +1172,18 @@ public class MainActivity extends Activity {
      *
      * The final scroll-to-start step goes through
      * scrollToScriptStartReliably() rather than a direct scrollTo() call:
-     * Mirror Off/Flip's own target (scrollTo(0, 0)) never depended on any
+     * Mirror Off/Flip's own target (scrollTo(0, 0)) never depends on any
      * measurement, so it was always correct the instant this method's
      * single post()-after-padding settled -- but Flip and Rotate's target
      * (getScriptStartScrollY() == maxScroll) does depend on scriptText's
-     * post-padding measured height, and physical testing on this project's
-     * older/slower target hardware found that single settle-frame
-     * sometimes insufficient for that specific (large, ~82.5%-of-viewport)
-     * padding change to fully land before it was read -- landing the
-     * opening position too high. scrollToScriptStartReliably() re-verifies
-     * on one further settled frame and self-corrects only if needed.
+     * post-padding measured height, so it is worth reliably re-verifying
+     * once the padding-driven re-layout has actually settled, as a bounded
+     * safeguard, even though physical testing established that this
+     * class's real Flip and Rotate opening-buffer defect was the padding
+     * *mapping* itself (see applyFullScreenScriptPadding()'s doc comment
+     * and PROJECT_SPEC.md section 35), not primarily a measurement-timing
+     * gap -- retaining this reliability check does not depend on which of
+     * the two was the actual cause.
      */
     private void resetToWaitingFromTop() {
         scrollHandler.removeCallbacksAndMessages(null);

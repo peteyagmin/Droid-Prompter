@@ -23,17 +23,22 @@ it. The commit that lands this update is necessarily newer than
 `13abf34`; that commit's hash is reported separately at the end of the
 task that made these changes, not inferred here.
 
-**A further round** (commit `a0a3088` and newer) fixed a second,
-separate bug found by physical testing of the reverse-scrolling round
-above: Mirror On + Flip and Rotate's opening buffer was missing — the
-first script line rendered near the top of the viewport instead of at
-the same ~77.5%-down position Mirror Off/Flip use. The reverse-mode
-padding formula itself was algebraically correct; the bug was that
-`computeMaxScroll()` was being read before `scriptText`'s padding-driven
-re-layout had reliably finished on this project's older/slower target
-hardware. `scrollToScriptStartReliably()` fixes this with a bounded,
-self-correcting re-verification — see "Physically observed: missing
-reverse-mode opening buffer, and its fix" under section 35.
+**A further round** (commit `a0a3088` and newer) found a second,
+separate bug via physical testing of the reverse-scrolling round above:
+Mirror On + Flip and Rotate's opening buffer was missing — the first
+script line rendered near the top of the viewport instead of at the same
+~77.5%-down position Mirror Off/Flip use. Fixing it took two sub-rounds:
+commit `08e3bbc` first diagnosed it as a measurement-timing gap and added
+`scrollToScriptStartReliably()`, but physical testing of that fix found
+the opening buffer still wrong; a following round found the actual cause
+was the reverse-mode padding *mapping* itself — logical bottom padding,
+not top, governs the visual opening space under Flip and Rotate's
+180-degree rotation, so the two sides must be exchanged rather than
+complemented. `scrollToScriptStartReliably()` was kept (it solves an
+independent measurement-reliability problem) alongside the corrected
+mapping. See "Reverse-mode full-screen padding" and "Physically
+observed: missing reverse-mode opening buffer, and its fix" under
+section 35 for the full history.
 
 Throughout this document:
 
@@ -2423,36 +2428,56 @@ same structure section 34 describes.
 position the first/last line at a comfortable on-screen height in
 Mirror Off/Flip by padding `scriptText` proportionally to the measured
 full-screen viewport height (section 21). Because Flip and Rotate
-renders content vertically flipped within its clip window (derivation
-above), naively reusing the same top/bottom padding fractions would
-place the first and last lines at the *wrong* heights. `AppConstants`-
-independent algebra (substituting the visual-start/visual-end
-conditions into the "relative on-screen position" formula derived
-above) gives the correct reverse-mode fractions:
+renders content vertically flipped within its clip window, naively
+reusing the same top/bottom padding fractions would place the first and
+last lines at the *wrong* heights: logical *bottom* padding becomes the
+visual opening space at the reverse start position (`scrollY ==
+maxScroll`), and logical *top* padding becomes the visual trailing
+space at the reverse end (`scrollY == 0`) — the two sides are
+**exchanged**, not complemented:
 
-- Reverse-mode top padding: `viewportHeight × (1.0 −
-  OPENING_SPACE_FRACTION)` = `0.225 × viewportHeight`.
-- Reverse-mode bottom padding: `viewportHeight × (1.0 −
-  END_SPACE_FRACTION)` = `0.6 × viewportHeight`.
+- Reverse-mode top padding: `viewportHeight × END_SPACE_FRACTION` =
+  `0.4 × viewportHeight`.
+- Reverse-mode bottom padding: `viewportHeight × OPENING_SPACE_FRACTION`
+  = `0.775 × viewportHeight`.
 
 These place the first line at the same ~77.5%-down opening height, and
 the final line at the same ~60%-down resting height, as Mirror
-Off/Flip — verified by the derivation above, not applied on the
-suggestion's word alone. Both fractions, and the mode selection, are
-centralized in one method:
+Off/Flip. Both fractions, and the mode selection, are centralized in
+one method:
 
 ```java
 private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
     int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-    float topFraction = isReverseScrollMode()
-            ? (1.0f - OPENING_SPACE_FRACTION) : OPENING_SPACE_FRACTION;
-    float bottomFraction = isReverseScrollMode()
-            ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
+    float topFraction = isReverseScrollMode() ? END_SPACE_FRACTION : OPENING_SPACE_FRACTION;
+    float bottomFraction = isReverseScrollMode() ? OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
     int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
     int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
     applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
 }
 ```
+
+**Corrected from an earlier, complement-based formula.** The version of
+this method that shipped with the reverse-scrolling fix (commit
+`a0a3088`) used `viewportHeight × (1.0 − OPENING_SPACE_FRACTION)` =
+`0.225 × viewportHeight` for the top and `viewportHeight × (1.0 −
+END_SPACE_FRACTION)` = `0.6 × viewportHeight` for the bottom — derived
+algebraically from a specific model of how `ScrollView`'s clip window
+composes with the child's own rotation matrix. That derivation was
+internally self-consistent, but physical hardware testing found it did
+not produce the intended on-screen result: the first line still landed
+near the top of the viewport, not ~77.5% down. A follow-up round (commit
+`08e3bbc`) added `scrollToScriptStartReliably()` on the theory that a
+stale `maxScroll` measurement was the cause; physical testing of *that*
+fix found the opening buffer still wrong, ruling out measurement timing
+as the (sole) explanation. The direct side-exchange formula above is the
+one physical testing actually confirmed against the on-screen result,
+which this document now treats as authoritative over the earlier
+derivation — see "Physically observed" below for the full history.
+`scrollToScriptStartReliably()` itself was kept: it solves a genuinely
+separate problem (measurement reliability once the *correct* padding is
+applied) from which padding mapping is correct, and remains a harmless
+no-op whenever the first measurement was already accurate.
 
 `resetToWaitingFromTop()` (Start Prompter and Restart's shared full-screen
 entry point, section 17) is the sole caller, called only after the
@@ -2509,57 +2534,60 @@ start/end, Pause/Resume) confirmed it correct, but found a *second*,
 separate bug: in Mirror On + Flip and Rotate, the first script line was
 appearing near the **top** of the full-screen viewport instead of at the
 same ~77.5%-down opening position Mirror Off/Flip use — the intended
-opening buffer was effectively missing. The algebraic derivation above
-(under "Reverse-mode full-screen padding") was re-verified and is
-correct on its own terms — `getScriptStartScrollY()` == `maxScroll`, and
-the reverse-mode top-padding fraction (`1 − OPENING_SPACE_FRACTION`)
-does place the first line at 77.5% down *given an accurate `maxScroll`
-at the moment `scrollTo()` runs*. The bug is not in that formula; it is
-that `maxScroll` (`computeMaxScroll()` = `scriptText.getHeight() −
-scrollView.getHeight()`) was being read too early relative to
-`applyFullScreenScriptPadding()`'s own effect on `scriptText`'s measured
-height.
+opening buffer was effectively missing. Getting this right took two
+rounds; both are recorded here since the first round's diagnosis turned
+out to be incomplete.
 
-Mirror Off/Flip's target scroll position, `scrollTo(0, 0)`, never
-depends on any measurement at all — it is valid to call the instant it's
-reached, regardless of whether `scriptText`'s padding-driven re-layout
-has actually finished. That is exactly why only the reverse-mode opening
-position was ever affected: it is the one case whose target
-(`maxScroll`) is measurement-dependent. The existing single
-`scrollView.post()` after `applyFullScreenScriptPadding()` (the same
-"wait one settle-frame" pattern already used, and already sufficient,
-for the system-bar-hide's own layout change) was not reliably enough on
-this project's older/slower target hardware for the reverse-mode
-padding change specifically — a much larger change (top + bottom padding
-together can reach ~82.5% of the viewport height) than the system-bar
-inset change the existing pattern was originally sized for.
+**Round one (commit `08e3bbc`) — measurement timing, found insufficient.**
+The reverse-mode padding fractions in place at the time (`1 −
+OPENING_SPACE_FRACTION` for top, `1 − END_SPACE_FRACTION` for bottom)
+were algebraically self-consistent with a specific model of how
+`ScrollView`'s clip window composes with the child's rotation matrix,
+so that round's diagnosis was that `maxScroll` (`computeMaxScroll()` =
+`scriptText.getHeight() − scrollView.getHeight()`) was simply being read
+before `applyFullScreenScriptPadding()`'s own effect on `scriptText`'s
+measured height had settled — plausible, since Mirror Off/Flip's target
+(`scrollTo(0, 0)`) never depends on that measurement at all, which is
+consistent with only the reverse-mode opening position being affected.
+That round added `scrollToScriptStartReliably(afterPositioned)`:
+scrolls once using whatever `computeMaxScroll()` reports immediately,
+waits one further settled frame, recomputes `maxScroll`, and re-scrolls
+only if the recomputed value differs — a single bounded correction pass,
+never a loop, wired into both of this codebase's script-start call sites
+(`resetToWaitingFromTop()` and Preview's `startPreviewScrolling()`).
+**Physical testing of that fix found the opening buffer still wrong** —
+ruling out measurement-timing staleness as the (sole) cause and showing
+the complement-based padding formula itself needed to be reconsidered,
+not just measured more reliably.
 
-**Fix**: `scrollToScriptStartReliably(afterPositioned)` replaces the
-direct `scrollTo(0, getScriptStartScrollY(computeMaxScroll()))` call at
-both of this codebase's two script-start call sites
-(`resetToWaitingFromTop()`, and Preview's `startPreviewScrolling()`).
-It scrolls once using whatever `computeMaxScroll()` reports immediately,
-then waits one further settled frame and recomputes `maxScroll`; if the
-recomputed value differs from the first attempt (meaning the first
-measurement was indeed stale), it re-scrolls to the corrected position.
-A single bounded correction pass, never a loop or an unbounded retry —
-and a harmless no-op whenever the first measurement was already
-accurate (including every Mirror Off/Flip case, where both attempts
-trivially agree on `0`). `afterPositioned` (nullable) runs only once the
-position is confirmed, so `startPreviewScrolling()` can defer resetting
-`previewScrollRemainderPx`/`previewScrollLastTickUptimeMs` and posting
-Preview's first tick until the corrected position is actually in place,
-rather than racing the correction.
+**Round two (this round) — the padding-side mapping was inverted.**
+Re-examining Flip and Rotate's rendering: because the 180-degree
+rotation flips the content vertically within `ScrollView`'s clip window,
+logical **bottom** padding — not top — becomes the visual opening space
+at the reverse start position (`scrollY == maxScroll`), and logical
+**top** padding becomes the visual trailing space at the reverse end
+(`scrollY == 0`). The two sides are **exchanged**, not complemented.
+Corrected mapping (see "Reverse-mode full-screen padding" above for the
+values and the method):
 
-This is a measurement-reliability fix, not a geometry change: the
-padding fractions (`0.225`/`0.6` derived above) and
-`applyFullScreenScriptPadding()` itself are unchanged; only *how
-reliably* the resulting `maxScroll` is read before scrolling to it
-changed. `loadScriptFile()`'s own (CONTROLS-preview, not full-screen)
-use of `getScriptStartScrollY(computeMaxScroll())` was left as a direct
-call, unchanged — not reported affected by this bug, and a lower-stakes
-context (a freshly loaded script's initial preview position, not an
-opening buffer the presenter reads from).
+| | Normal/Flip | Flip and Rotate (corrected) | Flip and Rotate (round-one, wrong) |
+| --- | --- | --- | --- |
+| Top padding | `OPENING_SPACE_FRACTION` | `END_SPACE_FRACTION` | `1 − OPENING_SPACE_FRACTION` |
+| Bottom padding | `END_SPACE_FRACTION` | `OPENING_SPACE_FRACTION` | `1 − END_SPACE_FRACTION` |
+
+This is a genuine geometry correction, not a re-tuning of the
+measurement-reliability fix — `scrollToScriptStartReliably()` from round
+one was kept as-is, since it solves an orthogonal problem (whether the
+*correct* padding's effect on `maxScroll` has actually settled by the
+time it's read) independent of which padding mapping is correct, and it
+remains a harmless no-op whenever the first measurement is already
+accurate.
+
+`loadScriptFile()`'s own (CONTROLS-preview, not full-screen) use of
+`getScriptStartScrollY(computeMaxScroll())` was left as a direct call,
+unchanged in both rounds — not reported affected by either bug, and a
+lower-stakes context (a freshly loaded script's initial preview
+position, not an opening buffer the presenter reads from).
 
 ### Pause and Resume in reverse mode
 
@@ -2799,11 +2827,21 @@ place in section 35 rather than left standing.
 
 A still later round found that the reverse-scrolling fix's own
 "algebraic derivation" for the reverse-mode padding fractions, while
-mathematically correct on its own terms, had not accounted for
+mathematically self-consistent on its own terms, had not accounted for
 measurement-timing reliability on physical hardware — physical testing
 found the resulting opening position wrong in practice despite the
-formula checking out on paper. Documented and fixed in section 35 under
-"Physically observed: missing reverse-mode opening buffer, and its fix"
-rather than left standing; a reminder that "verified by inspection" and
-"physically tested" (as this document defines both terms above) are not
-interchangeable, even for a change whose algebra has been checked twice.
+formula checking out on paper. That round's own fix
+(`scrollToScriptStartReliably()`) was itself then found insufficient by
+a further physical test, which is the clearer discrepancy: this
+document had asserted the padding *formula* was correct and only its
+measurement timing was at fault, when in fact the formula's premise —
+which padding side governs the visual opening space under a 180-degree
+rotation — was inverted. Both the formula (top/bottom exchanged rather
+than complemented) and this document were corrected in section 35 under
+"Reverse-mode full-screen padding" and "Physically observed: missing
+reverse-mode opening buffer, and its fix," rather than left standing. A
+reminder that "verified by inspection" and "physically tested" (as this
+document defines both terms above) are not interchangeable, even for a
+derivation checked algebraically more than once — and that a plausible
+alternative diagnosis (measurement timing) should not be accepted as
+confirmed until the fix built on it is itself physically re-tested.
