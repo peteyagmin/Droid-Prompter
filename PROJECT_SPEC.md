@@ -2981,22 +2981,32 @@ algebraic derivation checking out, has repeatedly not predicted the
 actual on-screen result for this specific geometry** — round four's
 formula was structurally well-reasoned (bottom padding's cancellation at
 `scrollY == maxScroll` is real and round three's null result proved it)
-and its *direction* was still backwards. The current
-`REVERSE_START_TOP_FRACTION = 0.60f` requires the same physical
-re-confirmation before it can be considered verified — specifically
-that, under Mirror On + Flip and Rotate: the first line now clears the
-centered Tap to Start overlay with a visible, non-overlapping gap below
-it (not above it, and not still behind it), comparable to (or, per the
-stated preference, slightly lower than) Mirror Off/Flip's own opening;
-Start Prompter and Restart produce visually identical opening positions;
-this holds in both Horizontal and Vertical Prompter Orientation, at both
-small and large font sizes, and on both short and long scripts; and the
-final-line resting position (reverse-mode bottom padding = `1 −
-END_SPACE_FRACTION` = `0.6`, unchanged since round four) still matches
-Mirror Off/Flip. Given this geometry's track record, a sixth calibration
-round should not be surprising if `0.60f` also proves insufficient or
-excessive on physical hardware — in either direction, now that the
-direction itself has been reversed once already.
+and its *direction* was still backwards.
+
+**Physically confirmed**: `REVERSE_START_TOP_FRACTION = 0.60f` was
+tested on real hardware and reported correct — the user's own words:
+"Perfect. You nailed it that time." Under Mirror On + Flip and Rotate,
+the first line now clears the centered Tap to Start overlay with a
+visible, non-overlapping gap below it, at an opening position matching
+the intent of this five-round calibration; the final-line resting
+position (reverse-mode bottom padding = `1 − END_SPACE_FRACTION` =
+`0.6`, unchanged since round four) was not separately called out as
+wrong, consistent with it still matching Mirror Off/Flip. This is the
+first round of the opening-buffer saga to receive an affirmative
+physical result rather than a further correction, closing it out for
+now. The exhaustive combination matrix this section otherwise calls for
+— both Prompter Orientations, small/large font sizes, short/long
+scripts, Left/Centered alignment, Start Prompter vs. Restart
+specifically — was not itemized in that confirmation, so treat the core
+geometry (opening position, buffer placement, clearing the overlay) as
+physically verified and the remaining combinations as still only
+"requires physical testing" per this section's earlier list, not
+separately confirmed. Given this geometry's five-round track record
+before finally landing correctly, a further report of it being wrong in
+some *other* combination (a different orientation, an extreme font
+size, a very short script) should be treated as plausible and
+investigated on its own terms, not assumed impossible just because the
+core geometry is now confirmed.
 
 ---
 
