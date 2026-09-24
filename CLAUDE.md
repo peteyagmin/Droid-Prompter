@@ -101,22 +101,31 @@ report the discrepancy before proceeding.
   direction (`remapScrollPositionForMirrorModeChange()`) rather than
   leaving it at the wrong end. Operator-facing controls stay upright and
   untransformed regardless of scroll direction.
-- Flip and Rotate must preserve the same visual opening position as
-  normal and Flip modes: the first line begins approximately 77.5
-  percent down the measured full-screen viewport, and the final line
-  settles at the same ~60%-down position as normal/Flip. In
-  `applyFullScreenScriptPadding()`, reverse mode's top/bottom padding
-  fractions are `OPENING_SPACE_FRACTION`/`END_SPACE_FRACTION` with the
-  two sides **exchanged** (reverse top = `END_SPACE_FRACTION`, reverse
-  bottom = `OPENING_SPACE_FRACTION`) — physically confirmed. A prior,
-  algebraically-derived **complement** formula (`1 -
-  OPENING_SPACE_FRACTION`/`1 - END_SPACE_FRACTION`) looked
-  self-consistent on paper but physical testing found it wrong; do not
-  reintroduce it without new physical confirmation. Reverse mode's
-  target scroll position (`maxScroll`) is also measurement-dependent in
-  a way Mirror Off/Flip's `scrollTo(0, 0)` never is, so always reach it
-  through `scrollToScriptStartReliably()` (not a direct `scrollTo()`),
-  which self-corrects once if the padding-driven re-layout hadn't
+- Flip and Rotate must clear the centered Tap to Start overlay with a
+  comfortable, non-overlapping gap, at an opening position comparable to
+  normal and Flip modes' own ~77.5%-down opening; the final line settles
+  at the same ~60%-down position as normal/Flip. In
+  `applyFullScreenScriptPadding()`, reverse mode's top padding is
+  `END_SPACE_FRACTION` (governs the final-line position; unchanged), but
+  reverse mode's **bottom** padding (which governs the *opening* space,
+  since the sides are exchanged, not complemented — see below) is
+  `REVERSE_OPENING_SPACE_FRACTION` (`0.95f`), a **separately calibrated**
+  constant, not `OPENING_SPACE_FRACTION` reused. `OPENING_SPACE_FRACTION`
+  (`0.775f`) continues to govern only Mirror Off/Flip's own top padding.
+  Two prior formulas were tried and physically found wrong before this
+  one: an algebraically-derived **complement** formula (`1 -
+  OPENING_SPACE_FRACTION`/`1 - END_SPACE_FRACTION`), and a side-exchange
+  formula that reused `OPENING_SPACE_FRACTION`'s own value for the
+  exchanged bottom padding instead of calibrating a separate constant.
+  Do not reintroduce either, and do not assume `REVERSE_OPENING_SPACE_FRACTION`'s
+  current value is final, without new physical confirmation — this
+  specific geometry has needed re-calibration multiple times; treat the
+  physically observed on-screen result as authoritative over any
+  algebraic derivation. Reverse mode's target scroll position
+  (`maxScroll`) is also measurement-dependent in a way Mirror Off/Flip's
+  `scrollTo(0, 0)` never is, so always reach it through
+  `scrollToScriptStartReliably()` (not a direct `scrollTo()`), which
+  self-corrects once if the padding-driven re-layout hadn't
   settled by the first measurement. This is a separate concern from the
   padding mapping above (which side governs the opening space) — fixing
   one does not fix the other, as this project's history shows.

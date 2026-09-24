@@ -40,6 +40,16 @@ mapping. See "Reverse-mode full-screen padding" and "Physically
 observed: missing reverse-mode opening buffer, and its fix" under
 section 35 for the full history.
 
+**A third sub-round** of the opening-buffer fix (commit newer than
+`3ec4c30`) found that the side-exchange mapping's reused
+`OPENING_SPACE_FRACTION` value (`0.775`) was itself insufficient once
+exchanged onto reverse mode's bottom padding: the first line cleared the
+"near the top" symptom but still sat behind the centered Tap to Start
+overlay. `REVERSE_OPENING_SPACE_FRACTION = 0.95f`, calibrated separately
+against physical testing, replaces `OPENING_SPACE_FRACTION` in that one
+branch; `OPENING_SPACE_FRACTION` itself is unchanged. See "Reverse-mode
+full-screen padding" under section 35.
+
 Throughout this document:
 
 - **Physically tested** means the user reported running the built APK on
@@ -2437,47 +2447,46 @@ space at the reverse end (`scrollY == 0`) — the two sides are
 **exchanged**, not complemented:
 
 - Reverse-mode top padding: `viewportHeight × END_SPACE_FRACTION` =
-  `0.4 × viewportHeight`.
-- Reverse-mode bottom padding: `viewportHeight × OPENING_SPACE_FRACTION`
-  = `0.775 × viewportHeight`.
+  `0.4 × viewportHeight` — unchanged, still governs the final-line
+  resting position (see "Final position" below).
+- Reverse-mode bottom padding — the opening space — uses a *separately
+  calibrated* fraction, `REVERSE_OPENING_SPACE_FRACTION` (`0.95f`), not
+  `OPENING_SPACE_FRACTION` directly: `viewportHeight ×
+  REVERSE_OPENING_SPACE_FRACTION` = `0.95 × viewportHeight`.
 
-These place the first line at the same ~77.5%-down opening height, and
-the final line at the same ~60%-down resting height, as Mirror
-Off/Flip. Both fractions, and the mode selection, are centralized in
-one method:
+Both fractions, and the mode selection, are centralized in one method:
 
 ```java
 private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
     int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
     float topFraction = isReverseScrollMode() ? END_SPACE_FRACTION : OPENING_SPACE_FRACTION;
-    float bottomFraction = isReverseScrollMode() ? OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
+    float bottomFraction = isReverseScrollMode() ? REVERSE_OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
     int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
     int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
     applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
 }
 ```
 
-**Corrected from an earlier, complement-based formula.** The version of
-this method that shipped with the reverse-scrolling fix (commit
-`a0a3088`) used `viewportHeight × (1.0 − OPENING_SPACE_FRACTION)` =
-`0.225 × viewportHeight` for the top and `viewportHeight × (1.0 −
-END_SPACE_FRACTION)` = `0.6 × viewportHeight` for the bottom — derived
-algebraically from a specific model of how `ScrollView`'s clip window
-composes with the child's own rotation matrix. That derivation was
-internally self-consistent, but physical hardware testing found it did
-not produce the intended on-screen result: the first line still landed
-near the top of the viewport, not ~77.5% down. A follow-up round (commit
-`08e3bbc`) added `scrollToScriptStartReliably()` on the theory that a
-stale `maxScroll` measurement was the cause; physical testing of *that*
-fix found the opening buffer still wrong, ruling out measurement timing
-as the (sole) explanation. The direct side-exchange formula above is the
-one physical testing actually confirmed against the on-screen result,
-which this document now treats as authoritative over the earlier
-derivation — see "Physically observed" below for the full history.
-`scrollToScriptStartReliably()` itself was kept: it solves a genuinely
-separate problem (measurement reliability once the *correct* padding is
-applied) from which padding mapping is correct, and remains a harmless
-no-op whenever the first measurement was already accurate.
+**Why a separate calibrated fraction, not `OPENING_SPACE_FRACTION`
+reused.** The side-exchange mapping itself — logical bottom padding
+governs the reverse-mode opening space — was confirmed correct by
+physical testing (commit `3ec4c30`, replacing an earlier complement-
+based formula that was not; see "Physically observed" below for that
+history). But a further round of physical testing found that simply
+reusing `OPENING_SPACE_FRACTION`'s own value (`0.775`) for that
+exchanged bottom padding was *itself* insufficient: the first line sat
+behind the centered Tap to Start overlay rather than clearing it with a
+comfortable gap, the same opening position Mirror Off/Flip already
+achieve. `OPENING_SPACE_FRACTION` and `REVERSE_OPENING_SPACE_FRACTION`
+drive visually different things — a top-padding gap measured top-down in
+normal mode, versus a bottom-padding gap that, after the 180-degree
+rotation, determines the same on-screen position from the opposite
+logical side — so there was no reason to expect them to share a numeric
+value, and physical testing confirms they don't:
+`REVERSE_OPENING_SPACE_FRACTION = 0.95f` is the value physically
+confirmed to open below the overlay with a modest gap.
+`OPENING_SPACE_FRACTION` itself (`0.775f`) is unchanged and continues to
+govern Mirror Off/Flip's own top padding exclusively.
 
 `resetToWaitingFromTop()` (Start Prompter and Restart's shared full-screen
 entry point, section 17) is the sole caller, called only after the
@@ -2567,10 +2576,10 @@ logical **bottom** padding — not top — becomes the visual opening space
 at the reverse start position (`scrollY == maxScroll`), and logical
 **top** padding becomes the visual trailing space at the reverse end
 (`scrollY == 0`). The two sides are **exchanged**, not complemented.
-Corrected mapping (see "Reverse-mode full-screen padding" above for the
-values and the method):
+Corrected side-exchange mapping (see "Reverse-mode full-screen padding"
+above for the current method):
 
-| | Normal/Flip | Flip and Rotate (corrected) | Flip and Rotate (round-one, wrong) |
+| | Normal/Flip | Flip and Rotate (round two, sides exchanged) | Flip and Rotate (round one, wrong) |
 | --- | --- | --- | --- |
 | Top padding | `OPENING_SPACE_FRACTION` | `END_SPACE_FRACTION` | `1 − OPENING_SPACE_FRACTION` |
 | Bottom padding | `END_SPACE_FRACTION` | `OPENING_SPACE_FRACTION` | `1 − END_SPACE_FRACTION` |
@@ -2583,11 +2592,33 @@ time it's read) independent of which padding mapping is correct, and it
 remains a harmless no-op whenever the first measurement is already
 accurate.
 
+**Round three (a further round) — the exchanged fraction's value needed
+its own calibration.** Round two exchanged *which side* governs the
+reverse-mode opening space (bottom padding, not top) but reused
+`OPENING_SPACE_FRACTION`'s existing value (`0.775`) for that bottom
+padding. Physical testing found this insufficient: the first line
+cleared the "near the top" symptom round two fixed, but still sat behind
+the centered Tap to Start overlay rather than at the same comfortable
+opening position Mirror Off/Flip achieve. `OPENING_SPACE_FRACTION` and a
+reverse-mode opening fraction drive visually different things (see
+"Reverse-mode full-screen padding" above), so there was no reason to
+expect the same numeric value to work for both once exchanged onto the
+opposite side. `REVERSE_OPENING_SPACE_FRACTION = 0.95f` was introduced
+as a value calibrated separately against the physical result, replacing
+`OPENING_SPACE_FRACTION` in the bottom-padding branch only —
+`OPENING_SPACE_FRACTION` itself is untouched and still governs Mirror
+Off/Flip's own top padding.
+
+| | Normal/Flip | Flip and Rotate (round three, current) | Flip and Rotate (round two) |
+| --- | --- | --- | --- |
+| Top padding | `OPENING_SPACE_FRACTION` (0.775) | `END_SPACE_FRACTION` (0.4) | `END_SPACE_FRACTION` (0.4) |
+| Bottom padding | `END_SPACE_FRACTION` (0.4) | `REVERSE_OPENING_SPACE_FRACTION` (0.95) | `OPENING_SPACE_FRACTION` (0.775) |
+
 `loadScriptFile()`'s own (CONTROLS-preview, not full-screen) use of
 `getScriptStartScrollY(computeMaxScroll())` was left as a direct call,
-unchanged in both rounds — not reported affected by either bug, and a
-lower-stakes context (a freshly loaded script's initial preview
-position, not an opening buffer the presenter reads from).
+unchanged across all three rounds — not reported affected by any of
+them, and a lower-stakes context (a freshly loaded script's initial
+preview position, not an opening buffer the presenter reads from).
 
 ### Pause and Resume in reverse mode
 
@@ -2772,25 +2803,35 @@ additionally requires physical confirmation that, under Mirror On +
 Flip and Rotate specifically: Preview and Start Prompter both visually
 begin at the script's first line and end at its last; automatic
 scrolling visually moves in the correct (forward-reading) direction at
-every Speed setting; the opening and final-line resting heights visually
-match Mirror Off/Flip; Resume continues in the correct direction from
-the exact paused position; and a Mirror Mode or Mirror On/Off change
-made from CONTROLS repositions the preview to the correct end rather
-than leaving it reversed. None of this can be confirmed by source
-inspection or a successful build alone — the algebraic derivation above
-gives high confidence in the formulas, but only physical hardware can
-confirm the actual rendered geometry. This is exactly how the missing
-reverse-mode opening buffer described above was originally caught: the
-formula was algebraically sound but a measurement-timing gap only
-surfaced on physical (older/slower) hardware. The `scrollToScriptStartReliably()`
-fix requires the same physical re-confirmation before it can be
-considered verified — specifically that, under Mirror On + Flip and
-Rotate, the first line now lands at ~77.5% down the viewport on both
-Start Prompter and Restart, in both Horizontal and Vertical Prompter
+every Speed setting; Resume continues in the correct direction from the
+exact paused position; and a Mirror Mode or Mirror On/Off change made
+from CONTROLS repositions the preview to the correct end rather than
+leaving it reversed. None of this can be confirmed by source inspection
+or a successful build alone.
+
+The reverse-mode opening buffer specifically took three physical-testing
+rounds to reach its current form (commits `08e3bbc`, `3ec4c30`, and this
+round's `REVERSE_OPENING_SPACE_FRACTION` calibration) — a measurement-
+timing fix that testing found insufficient, a side-exchange padding
+mapping that testing confirmed but whose reused `OPENING_SPACE_FRACTION`
+value testing then found insufficient, and finally a separately
+calibrated fraction (`0.95f`) for the exchanged bottom padding. That
+history is itself the caution: **the build succeeding, and even an
+algebraic derivation checking out, has repeatedly not predicted the
+actual on-screen result for this specific geometry.** The current
+`REVERSE_OPENING_SPACE_FRACTION = 0.95f` value requires the same
+physical re-confirmation before it can be considered verified —
+specifically that, under Mirror On + Flip and Rotate: the first line now
+clears the centered Tap to Start overlay with a comfortable, non-
+overlapping gap, at a position comparable to Mirror Off/Flip's own
+opening; Start Prompter and Restart produce visually identical opening
+positions; this holds in both Horizontal and Vertical Prompter
 Orientation, at both small and large font sizes, and on both short and
-long scripts — not merely that the build succeeds and the formula
-checks out on paper (as the previous round's build also did, before
-this bug was found).
+long scripts; and the final-line resting position (governed by
+`END_SPACE_FRACTION`, unchanged by this round) still matches Mirror
+Off/Flip. Given this geometry's track record, a fourth calibration round
+should not be surprising if `0.95f` also proves insufficient or
+excessive on physical hardware.
 
 ---
 
