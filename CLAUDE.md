@@ -116,19 +116,27 @@ report the discrepancy before proceeding.
   change** in the opening position at all). Do not assume bottom padding
   affects the reverse-mode opening, or that top padding affects the
   reverse-mode end — that "sides exchanged" framing was tried and
-  disproved. In `applyFullScreenScriptPadding()`, reverse-mode top
-  padding is `REVERSE_START_TOP_FRACTION` (`0.15f`, a separately
-  calibrated constant, not derived from `OPENING_SPACE_FRACTION`), and
-  reverse-mode bottom padding is `(1 - END_SPACE_FRACTION)` = `0.6`.
+  disproved. Within reverse-mode top padding, **increasing** it moves
+  the buffer to the top of the screen and the first line lower
+  (matching normal/Flip); **decreasing** it moves the buffer to the
+  bottom and the first line higher, clearing it above Tap to Start on
+  the wrong side — this specific direction was also tried backwards once
+  and physically disproved, so do not assume "less top padding = first
+  line further down" without new physical confirmation. In
+  `applyFullScreenScriptPadding()`, reverse-mode top padding is
+  `REVERSE_START_TOP_FRACTION` (`0.60f`, a separately calibrated
+  constant, not derived from `OPENING_SPACE_FRACTION`), and reverse-mode
+  bottom padding is `(1 - END_SPACE_FRACTION)` = `0.6`.
   `OPENING_SPACE_FRACTION` (`0.775f`) and `END_SPACE_FRACTION` (`0.4f`)
   are unchanged and continue to govern only Mirror Off/Flip's own
-  padding. This geometry has been revised four times on physical-testing
+  padding. This geometry has been revised five times on physical-testing
   evidence (complement formula → sides-exchanged mapping →
-  `REVERSE_OPENING_SPACE_FRACTION` calibration → the current top/bottom
-  model); do not assume `REVERSE_START_TOP_FRACTION`'s current value is
-  final without new physical confirmation, and treat the physically
-  observed on-screen result as authoritative over any algebraic
-  derivation, including this one. Reverse mode's target scroll position
+  `REVERSE_OPENING_SPACE_FRACTION` calibration → top/bottom model with
+  wrong direction → corrected direction); do not assume
+  `REVERSE_START_TOP_FRACTION`'s current value or direction is final
+  without new physical confirmation, and treat the physically observed
+  on-screen result as authoritative over any algebraic derivation,
+  including this one. Reverse mode's target scroll position
   (`maxScroll`) is also measurement-dependent in a way Mirror Off/Flip's
   `scrollTo(0, 0)` never is, so always reach it through
   `scrollToScriptStartReliably()` (not a direct `scrollTo()`), which

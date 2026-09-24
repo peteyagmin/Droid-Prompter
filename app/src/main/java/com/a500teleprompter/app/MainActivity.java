@@ -116,31 +116,28 @@ public class MainActivity extends Activity {
     /**
      * The visual opening space at Flip and Rotate's reverse start position
      * (scrollY == maxScroll) is governed by scriptText's logical *top*
-     * padding, not bottom padding -- the opposite of what an earlier
-     * version of this file assumed. Physical testing disproved that
-     * assumption directly: raising reverse-mode bottom padding from
-     * 0.775x to 0.95x the viewport height produced no visible change in
-     * the opening position at all. The reason is structural, not just
-     * empirical: at scrollY == maxScroll == scriptTextHeight -
-     * viewportHeight, any increase to bottom padding increases
-     * scriptTextHeight and maxScroll by the exact same amount, so the two
-     * changes cancel and the visible opening position is left unmoved --
-     * only top padding, which maxScroll's own definition does not net
-     * out, can move it. (Bottom padding still matters: it governs the
-     * reverse visual *end*, at scrollY == 0, where no such cancellation
-     * occurs -- see applyFullScreenScriptPadding()'s doc comment.)
+     * padding, not bottom padding (bottom padding cancels out of that
+     * position entirely -- see applyFullScreenScriptPadding()'s doc
+     * comment). *Increasing* this fraction moves the first line further
+     * down the screen; *decreasing* it moves the line up. This is the
+     * opposite direction from Mirror Off/Flip's own top padding (where
+     * more top padding also means further down, but by directly pushing
+     * the content down from a scrollY-0 start -- an entirely different
+     * mechanism, since Flip and Rotate's opening is reached by scrolling
+     * up from maxScroll, not down from 0).
      *
-     * This fraction is deliberately smaller than the value that would
-     * place the first line at exactly the same ~77.5%-down height Mirror
-     * Off/Flip use (which would be 1 - OPENING_SPACE_FRACTION = 0.225,
-     * given the relationship above) -- physical testing of that exact
-     * value, before Flip and Rotate's padding sides were exchanged, still
-     * placed the line too high (round one of this feature's calibration).
-     * Given a choice, the line beginning slightly further down than an
-     * exact match is preferred over risking it landing behind the
-     * centered Tap to Start overlay again.
+     * This direction was confirmed by two data points, not assumed:
+     * physical testing at 0.40 found the first passage behind the Tap to
+     * Start overlay; physical testing at a *smaller* value, 0.15, moved
+     * the passage *higher still*, fully above the overlay -- the opposite
+     * of an earlier, incorrect assumption that decreasing this fraction
+     * would move the passage lower. The current value, 0.60, is chosen
+     * above 0.40 (which was already too high) specifically to move the
+     * passage further down, with additional margin reflecting the stated
+     * preference for the passage landing slightly too low rather than
+     * too high or behind the overlay again.
      */
-    private static final float REVERSE_START_TOP_FRACTION = 0.15f;
+    private static final float REVERSE_START_TOP_FRACTION = 0.60f;
     private static final float SCRIPT_PADDING_DP = 24f;
 
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
