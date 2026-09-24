@@ -40,15 +40,33 @@ mapping. See "Reverse-mode full-screen padding" and "Physically
 observed: missing reverse-mode opening buffer, and its fix" under
 section 35 for the full history.
 
-**A third sub-round** of the opening-buffer fix (commit newer than
-`3ec4c30`) found that the side-exchange mapping's reused
-`OPENING_SPACE_FRACTION` value (`0.775`) was itself insufficient once
-exchanged onto reverse mode's bottom padding: the first line cleared the
-"near the top" symptom but still sat behind the centered Tap to Start
-overlay. `REVERSE_OPENING_SPACE_FRACTION = 0.95f`, calibrated separately
-against physical testing, replaces `OPENING_SPACE_FRACTION` in that one
-branch; `OPENING_SPACE_FRACTION` itself is unchanged. See "Reverse-mode
-full-screen padding" under section 35.
+**A third sub-round** of the opening-buffer fix (commit `735acb0`) found
+that the then-current mapping's reused `OPENING_SPACE_FRACTION` value
+(`0.775`) was itself insufficient once applied to reverse mode's bottom
+padding: the first line cleared the "near the top" symptom but still sat
+behind the centered Tap to Start overlay. `REVERSE_OPENING_SPACE_FRACTION
+= 0.95f`, calibrated separately against physical testing, replaced
+`OPENING_SPACE_FRACTION` in that one branch.
+
+**A fourth sub-round** (commit newer than `735acb0`) found, via physical
+testing, that raising that bottom-padding fraction to `0.95` had **no
+visible effect on the opening position at all** — disproving the
+"logical bottom padding governs the reverse-mode opening" premise the
+second and third sub-rounds shared, not merely its calibrated value.
+Structurally: the reverse start is `scrollY == maxScroll`, and any
+change to bottom padding changes `maxScroll` by the same amount, so the
+two cancel exactly at that position. It is **top** padding, not bottom,
+that actually governs the reverse-mode opening; bottom padding
+correctly governs the reverse-mode *end* instead, where no such
+cancellation occurs. The corrected model uses a new, independently
+calibrated `REVERSE_START_TOP_FRACTION = 0.15f` for reverse-mode top
+padding, and restores `(1 − END_SPACE_FRACTION)` = `0.6` for reverse-mode
+bottom padding; `REVERSE_OPENING_SPACE_FRACTION` was removed as
+unused. `OPENING_SPACE_FRACTION` itself remains unchanged throughout,
+governing only Mirror Off/Flip's own top padding. See "Reverse-mode
+full-screen padding" and "Physically observed: missing reverse-mode
+opening buffer, and its fix" (round four) under section 35 for the full
+derivation.
 
 Throughout this document:
 
@@ -2437,56 +2455,65 @@ same structure section 34 describes.
 `OPENING_SPACE_FRACTION` (`0.775f`) and `END_SPACE_FRACTION` (`0.4f`)
 position the first/last line at a comfortable on-screen height in
 Mirror Off/Flip by padding `scriptText` proportionally to the measured
-full-screen viewport height (section 21). Because Flip and Rotate
-renders content vertically flipped within its clip window, naively
-reusing the same top/bottom padding fractions would place the first and
-last lines at the *wrong* heights: logical *bottom* padding becomes the
-visual opening space at the reverse start position (`scrollY ==
-maxScroll`), and logical *top* padding becomes the visual trailing
-space at the reverse end (`scrollY == 0`) — the two sides are
-**exchanged**, not complemented:
+full-screen viewport height (section 21). Flip and Rotate cannot reuse
+these fractions unmodified — reaching the correct reverse-mode mapping
+took three rounds of physical testing, documented in full under
+"Physically observed" below. The current, physically validated model:
 
-- Reverse-mode top padding: `viewportHeight × END_SPACE_FRACTION` =
-  `0.4 × viewportHeight` — unchanged, still governs the final-line
-  resting position (see "Final position" below).
-- Reverse-mode bottom padding — the opening space — uses a *separately
-  calibrated* fraction, `REVERSE_OPENING_SPACE_FRACTION` (`0.95f`), not
-  `OPENING_SPACE_FRACTION` directly: `viewportHeight ×
-  REVERSE_OPENING_SPACE_FRACTION` = `0.95 × viewportHeight`.
+**Top padding governs the reverse-mode opening; bottom padding governs
+the reverse-mode end — not the "sides exchanged" model an earlier
+round of this document asserted.** The reverse visual start is
+`scrollY == maxScroll`, where `maxScroll = scriptTextHeight −
+viewportHeight`. Any change to reverse-mode *bottom* padding changes
+`scriptTextHeight` and `maxScroll` by the exact same amount, and those
+two changes cancel in the position actually reached — so bottom padding
+has **no effect** on where the first line visually lands at the reverse
+start. This was confirmed directly: raising the reverse-mode bottom
+padding fraction from `0.775` to `0.95` (commit `735acb0`) produced no
+visible change in the opening position at all. *Top* padding is not
+subject to this cancellation, and physical testing confirms it is what
+actually moves the opening position. The reverse visual end, by
+contrast, is `scrollY == 0`, where no such cancellation occurs for
+bottom padding — so bottom padding is what correctly governs the ending
+position instead.
+
+- Reverse-mode top padding (opening): `viewportHeight ×
+  REVERSE_START_TOP_FRACTION` = `0.15 × viewportHeight` — a separately
+  calibrated constant, not derived from `OPENING_SPACE_FRACTION`.
+- Reverse-mode bottom padding (ending): `viewportHeight × (1.0 −
+  END_SPACE_FRACTION)` = `0.6 × viewportHeight`.
 
 Both fractions, and the mode selection, are centralized in one method:
 
 ```java
 private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
     int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-    float topFraction = isReverseScrollMode() ? END_SPACE_FRACTION : OPENING_SPACE_FRACTION;
-    float bottomFraction = isReverseScrollMode() ? REVERSE_OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
+    float topFraction = isReverseScrollMode() ? REVERSE_START_TOP_FRACTION : OPENING_SPACE_FRACTION;
+    float bottomFraction = isReverseScrollMode() ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
     int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
     int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
     applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);
 }
 ```
 
-**Why a separate calibrated fraction, not `OPENING_SPACE_FRACTION`
-reused.** The side-exchange mapping itself — logical bottom padding
-governs the reverse-mode opening space — was confirmed correct by
-physical testing (commit `3ec4c30`, replacing an earlier complement-
-based formula that was not; see "Physically observed" below for that
-history). But a further round of physical testing found that simply
-reusing `OPENING_SPACE_FRACTION`'s own value (`0.775`) for that
-exchanged bottom padding was *itself* insufficient: the first line sat
-behind the centered Tap to Start overlay rather than clearing it with a
-comfortable gap, the same opening position Mirror Off/Flip already
-achieve. `OPENING_SPACE_FRACTION` and `REVERSE_OPENING_SPACE_FRACTION`
-drive visually different things — a top-padding gap measured top-down in
-normal mode, versus a bottom-padding gap that, after the 180-degree
-rotation, determines the same on-screen position from the opposite
-logical side — so there was no reason to expect them to share a numeric
-value, and physical testing confirms they don't:
-`REVERSE_OPENING_SPACE_FRACTION = 0.95f` is the value physically
-confirmed to open below the overlay with a modest gap.
-`OPENING_SPACE_FRACTION` itself (`0.775f`) is unchanged and continues to
-govern Mirror Off/Flip's own top padding exclusively.
+**Why `REVERSE_START_TOP_FRACTION` is `0.15`, not the `0.225` an exact
+77.5%-down match would imply.** Given the cancellation reasoning above,
+the fraction that would place the first line at exactly the same
+77.5%-down height as Mirror Off/Flip is `1 − OPENING_SPACE_FRACTION` =
+`0.225`. That exact value was in fact the reverse-mode top padding used
+in this feature's *first* round (commit `a0a3088`), before the padding
+sides were understood to need independent (not exchanged) calibration —
+and physical testing at that time still found the opening position too
+high. Rather than re-attempt precisely `0.225` and risk repeating that
+result, `0.15` was chosen deliberately lower — moving the first line
+further down than an exact 77.5%-down match — on the stated preference
+that the line beginning slightly too low is preferable to it landing
+too high or behind the centered Tap to Start overlay again. `0.225` vs.
+`0.15`'s difference from round one's outcome is not fully explained by
+this document (see "Physically observed" below); this round proceeds
+on the physically-confirmed cancellation reasoning and the explicit
+too-low-over-too-high preference rather than re-deriving a value that
+has already failed once.
 
 `resetToWaitingFromTop()` (Start Prompter and Restart's shared full-screen
 entry point, section 17) is the sole caller, called only after the
@@ -2609,14 +2636,75 @@ as a value calibrated separately against the physical result, replacing
 `OPENING_SPACE_FRACTION` itself is untouched and still governs Mirror
 Off/Flip's own top padding.
 
-| | Normal/Flip | Flip and Rotate (round three, current) | Flip and Rotate (round two) |
+| | Normal/Flip | Flip and Rotate (round three) | Flip and Rotate (round two) |
 | --- | --- | --- | --- |
 | Top padding | `OPENING_SPACE_FRACTION` (0.775) | `END_SPACE_FRACTION` (0.4) | `END_SPACE_FRACTION` (0.4) |
 | Bottom padding | `END_SPACE_FRACTION` (0.4) | `REVERSE_OPENING_SPACE_FRACTION` (0.95) | `OPENING_SPACE_FRACTION` (0.775) |
 
+**Round four (a further round) — round two's "sides exchanged" framing
+was itself wrong; corrected to "top governs opening, bottom governs
+end."** Round three's calibration (raising the reverse-mode bottom
+padding fraction to `0.95`, on the theory that bottom padding governs
+the reverse opening space) was physically tested and **produced no
+visible change at all** — the first line remained behind the Tap to
+Start overlay exactly as before. This result disproves round two's
+premise directly, and has a structural explanation: the reverse visual
+start is `scrollY == maxScroll`, and `maxScroll = scriptTextHeight −
+viewportHeight`. Any increase to bottom padding increases
+`scriptTextHeight` and `maxScroll` by the same amount, so the two
+changes cancel exactly at `scrollY == maxScroll` and the visible opening
+position cannot move no matter how large bottom padding is made. Top
+padding is not subject to this cancellation — it is what actually
+governs the opening position, and round two's own top-padding choice
+(`END_SPACE_FRACTION` = `0.4`) is why the line landed "near the vertical
+center, behind Tap to Start" rather than near the top *or* at the
+correct 77.5%-down position: `0.4` is neither.
+
+The reverse visual *end* (`scrollY == 0`) has no analogous cancellation
+for bottom padding — round two's and three's shared choice of top
+padding = `END_SPACE_FRACTION` for the *end* was actually a coincidence
+of the "sides exchanged" framing, not a correct application of it; what
+actually governs the end position, by the same reasoning, is bottom
+padding, and `(1 − END_SPACE_FRACTION)` = `0.6` for bottom padding is
+what places the final line at the intended ~60%-down resting height
+(independently re-derived and consistent with round one's original
+value for the same purpose, which — for the ending position only —
+appears to have been correct all along).
+
+Corrected model (see "Reverse-mode full-screen padding" above for the
+current method and values):
+
+| | Normal/Flip | Flip and Rotate (round four, current) | Flip and Rotate (round three, wrong) |
+| --- | --- | --- | --- |
+| Top padding (opening) | `OPENING_SPACE_FRACTION` (0.775) | `REVERSE_START_TOP_FRACTION` (0.15) | `END_SPACE_FRACTION` (0.4) |
+| Bottom padding (end) | `END_SPACE_FRACTION` (0.4) | `1 − END_SPACE_FRACTION` (0.6) | `REVERSE_OPENING_SPACE_FRACTION` (0.95) |
+
+`REVERSE_OPENING_SPACE_FRACTION` was removed (it is no longer used
+anywhere); `REVERSE_START_TOP_FRACTION` replaces it as the sole
+reverse-mode-specific constant. `scrollToScriptStartReliably()` remains
+unchanged across all four rounds — round four's physical test (bottom
+padding raised, no visible effect) is itself further evidence that
+measurement timing was never the remaining issue, since a genuinely
+stale measurement would have produced *some* visible movement, not
+none.
+
+**An open question this document does not resolve**: round one (commit
+`a0a3088`) used reverse-mode top padding = `1 − OPENING_SPACE_FRACTION`
+= `0.225` — under the cancellation reasoning above, this should have
+placed the opening at exactly the same 77.5%-down height Mirror
+Off/Flip use, yet physical testing at the time found it "near the top,"
+not correct. Round four's `0.15` is deliberately *lower* than `0.225`
+(moving the line further down still) specifically because of that
+unresolved discrepancy, on the stated preference for the line landing
+too low rather than too high — not because `0.225`'s failure has been
+explained. If `0.15` is also found insufficient or excessive by physical
+testing, revisit this discrepancy rather than assume the cancellation
+model itself is wrong; round three's null result is strong, structural
+evidence for it.
+
 `loadScriptFile()`'s own (CONTROLS-preview, not full-screen) use of
 `getScriptStartScrollY(computeMaxScroll())` was left as a direct call,
-unchanged across all three rounds — not reported affected by any of
+unchanged across all four rounds — not reported affected by any of
 them, and a lower-stakes context (a freshly loaded script's initial
 preview position, not an opening buffer the presenter reads from).
 
@@ -2809,29 +2897,39 @@ from CONTROLS repositions the preview to the correct end rather than
 leaving it reversed. None of this can be confirmed by source inspection
 or a successful build alone.
 
-The reverse-mode opening buffer specifically took three physical-testing
-rounds to reach its current form (commits `08e3bbc`, `3ec4c30`, and this
-round's `REVERSE_OPENING_SPACE_FRACTION` calibration) — a measurement-
-timing fix that testing found insufficient, a side-exchange padding
-mapping that testing confirmed but whose reused `OPENING_SPACE_FRACTION`
-value testing then found insufficient, and finally a separately
-calibrated fraction (`0.95f`) for the exchanged bottom padding. That
+The reverse-mode opening buffer specifically took four physical-testing
+rounds to reach its current form (commits `08e3bbc`, `3ec4c30`,
+`735acb0`, and this round's `REVERSE_START_TOP_FRACTION` calibration) —
+a measurement-timing fix that testing found insufficient, a side-
+exchange padding mapping whose *direction* testing confirmed but whose
+reused `OPENING_SPACE_FRACTION` value testing then found insufficient, a
+bottom-padding increase that testing found had **no visible effect at
+all** (disproving the side-exchange framing itself, not just its
+calibration), and finally a corrected "top governs opening, bottom
+governs end" model with an independently calibrated top fraction. That
 history is itself the caution: **the build succeeding, and even an
 algebraic derivation checking out, has repeatedly not predicted the
-actual on-screen result for this specific geometry.** The current
-`REVERSE_OPENING_SPACE_FRACTION = 0.95f` value requires the same
-physical re-confirmation before it can be considered verified —
-specifically that, under Mirror On + Flip and Rotate: the first line now
-clears the centered Tap to Start overlay with a comfortable, non-
-overlapping gap, at a position comparable to Mirror Off/Flip's own
-opening; Start Prompter and Restart produce visually identical opening
-positions; this holds in both Horizontal and Vertical Prompter
-Orientation, at both small and large font sizes, and on both short and
-long scripts; and the final-line resting position (governed by
-`END_SPACE_FRACTION`, unchanged by this round) still matches Mirror
-Off/Flip. Given this geometry's track record, a fourth calibration round
-should not be surprising if `0.95f` also proves insufficient or
-excessive on physical hardware.
+actual on-screen result for this specific geometry** — round three's
+formula was internally consistent with round two's own stated model and
+still turned out to have zero real effect. The current
+`REVERSE_START_TOP_FRACTION = 0.15f` requires the same physical
+re-confirmation before it can be considered verified — specifically
+that, under Mirror On + Flip and Rotate: the first line now clears the
+centered Tap to Start overlay with a visible, non-overlapping gap below
+it, comparable to (or, per the stated preference, slightly lower than)
+Mirror Off/Flip's own opening; Start Prompter and Restart produce
+visually identical opening positions; this holds in both Horizontal and
+Vertical Prompter Orientation, at both small and large font sizes, and
+on both short and long scripts; and the final-line resting position
+(now governed by reverse-mode bottom padding = `1 − END_SPACE_FRACTION`,
+changed this round from `REVERSE_OPENING_SPACE_FRACTION`, but expected
+to land at the same ~60%-down height as before) still matches Mirror
+Off/Flip. Given this geometry's track record, a fifth calibration round
+should not be surprising if `0.15f` also proves insufficient or
+excessive on physical hardware — and this document's "open question"
+above (round one's `0.225` failing despite the cancellation reasoning
+now suggesting it shouldn't have) remains unresolved and worth
+revisiting if so.
 
 ---
 
@@ -2886,3 +2984,21 @@ document defines both terms above) are not interchangeable, even for a
 derivation checked algebraically more than once — and that a plausible
 alternative diagnosis (measurement timing) should not be accepted as
 confirmed until the fix built on it is itself physically re-tested.
+
+A yet further round found that even the "sides exchanged" correction
+above was itself wrong in its premise, not just its calibrated value:
+this document had asserted logical bottom padding governs the
+reverse-mode opening position, when physical testing (raising that
+bottom padding from `0.775` to `0.95` with no visible effect) proved it
+does not — `maxScroll`'s own definition cancels any change to bottom
+padding at the reverse start position, a structural fact this document
+had not identified despite two prior rounds of padding-formula
+correction. It is top padding that governs the opening, and bottom
+padding that correctly governs the reverse-mode end. Corrected in
+section 35 under "Reverse-mode full-screen padding" and "Physically
+observed" (round four) rather than left standing. This project's
+Flip-and-Rotate padding geometry has now been revised four times on
+physical-testing evidence; each revision looked internally consistent
+at the time it was written. Treat any *further* physical test result on
+this specific geometry as capable of overturning the current model too,
+rather than assuming round four has necessarily settled it.

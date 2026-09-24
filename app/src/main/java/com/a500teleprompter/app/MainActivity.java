@@ -115,23 +115,32 @@ public class MainActivity extends Activity {
 
     /**
      * The visual opening space at Flip and Rotate's reverse start position
-     * is governed by scriptText's logical *bottom* padding (see
-     * applyFullScreenScriptPadding()'s doc comment) rather than top
-     * padding, and physical testing found that simply reusing
-     * OPENING_SPACE_FRACTION for that bottom padding (as Mirror Off/Flip's
-     * own top padding does) left the first line sitting behind the
-     * centered Tap to Start overlay -- not the same comfortable opening
-     * position Mirror Off/Flip achieve. This separately calibrated
-     * fraction is physically confirmed to clear the overlay with a modest
-     * gap; it is deliberately a distinct value from OPENING_SPACE_FRACTION
-     * rather than a derived one, since the two fractions drive visually
-     * different things (a top-padding gap measured top-down in normal
-     * mode, versus a bottom-padding gap that -- after the 180-degree
-     * rotation -- determines the same on-screen position from the
-     * opposite logical side) and there is no reason to expect them to
-     * share a numeric value.
+     * (scrollY == maxScroll) is governed by scriptText's logical *top*
+     * padding, not bottom padding -- the opposite of what an earlier
+     * version of this file assumed. Physical testing disproved that
+     * assumption directly: raising reverse-mode bottom padding from
+     * 0.775x to 0.95x the viewport height produced no visible change in
+     * the opening position at all. The reason is structural, not just
+     * empirical: at scrollY == maxScroll == scriptTextHeight -
+     * viewportHeight, any increase to bottom padding increases
+     * scriptTextHeight and maxScroll by the exact same amount, so the two
+     * changes cancel and the visible opening position is left unmoved --
+     * only top padding, which maxScroll's own definition does not net
+     * out, can move it. (Bottom padding still matters: it governs the
+     * reverse visual *end*, at scrollY == 0, where no such cancellation
+     * occurs -- see applyFullScreenScriptPadding()'s doc comment.)
+     *
+     * This fraction is deliberately smaller than the value that would
+     * place the first line at exactly the same ~77.5%-down height Mirror
+     * Off/Flip use (which would be 1 - OPENING_SPACE_FRACTION = 0.225,
+     * given the relationship above) -- physical testing of that exact
+     * value, before Flip and Rotate's padding sides were exchanged, still
+     * placed the line too high (round one of this feature's calibration).
+     * Given a choice, the line beginning slightly further down than an
+     * exact match is preferred over risking it landing behind the
+     * centered Tap to Start overlay again.
      */
-    private static final float REVERSE_OPENING_SPACE_FRACTION = 0.95f;
+    private static final float REVERSE_START_TOP_FRACTION = 0.15f;
     private static final float SCRIPT_PADDING_DP = 24f;
 
     private static final String STATE_SCRIPT_TEXT = "state_script_text";
@@ -749,30 +758,28 @@ public class MainActivity extends Activity {
      * Normal/Flip: top/bottom padding are OPENING_SPACE_FRACTION/
      * END_SPACE_FRACTION of the viewport, exactly as before this feature.
      *
-     * Flip and Rotate: the 180-degree rotation (applyMirror()) makes the
-     * rendered content within a given scrollY window a top/bottom mirror
-     * image of what scrollY alone would suggest, so logical *bottom*
-     * padding becomes the visual opening space at the reverse start
-     * position (scrollY == maxScroll), and logical *top* padding becomes
-     * the visual trailing space at the reverse end (scrollY == 0) -- the
-     * sides are exchanged, not complemented. Reverse-mode top padding is
-     * therefore END_SPACE_FRACTION of the viewport (unchanged, still
-     * governs the final-line resting position). Reverse-mode bottom
-     * padding -- the opening space -- uses REVERSE_OPENING_SPACE_FRACTION
-     * rather than reusing OPENING_SPACE_FRACTION directly: physical
-     * testing confirmed the side-exchange mapping itself (an earlier
-     * complement-based formula, 1 - OPENING_SPACE_FRACTION/1 -
-     * END_SPACE_FRACTION, did not; see PROJECT_SPEC.md section 35), but a
-     * further round of testing found OPENING_SPACE_FRACTION's own value
-     * (0.775) insufficient once exchanged onto bottom padding -- the
-     * first line still sat behind the centered Tap to Start overlay.
-     * REVERSE_OPENING_SPACE_FRACTION (0.95) is separately calibrated
-     * against that physical result; see its own doc comment.
+     * Flip and Rotate: physical testing (see REVERSE_START_TOP_FRACTION's
+     * doc comment for the full derivation) established that the reverse
+     * visual *opening* (scrollY == maxScroll) is governed by scriptText's
+     * logical *top* padding, and the reverse visual *end* (scrollY == 0)
+     * is governed by logical *bottom* padding -- top padding does not
+     * cancel out of maxScroll's own definition, bottom padding does. So,
+     * unlike Mirror Off/Flip, reverse mode's top and bottom fractions are
+     * calibrated independently rather than reusing OPENING_SPACE_FRACTION/
+     * END_SPACE_FRACTION verbatim or as a simple complement of both:
+     * reverse-mode top padding is REVERSE_START_TOP_FRACTION (a
+     * separately calibrated constant, not derived from
+     * OPENING_SPACE_FRACTION), and reverse-mode bottom padding is
+     * (1 - END_SPACE_FRACTION) of the viewport -- which does place the
+     * final line at the same on-screen height END_SPACE_FRACTION gives
+     * Mirror Off/Flip, since bottom padding's effect on the visual end
+     * is not subject to the cancellation that makes top padding the
+     * opening-controlling side.
      */
     private void applyFullScreenScriptPadding(int fullScreenHeightPx) {
         int sidePaddingPx = dpToPx(SCRIPT_PADDING_DP);
-        float topFraction = isReverseScrollMode() ? END_SPACE_FRACTION : OPENING_SPACE_FRACTION;
-        float bottomFraction = isReverseScrollMode() ? REVERSE_OPENING_SPACE_FRACTION : END_SPACE_FRACTION;
+        float topFraction = isReverseScrollMode() ? REVERSE_START_TOP_FRACTION : OPENING_SPACE_FRACTION;
+        float bottomFraction = isReverseScrollMode() ? (1.0f - END_SPACE_FRACTION) : END_SPACE_FRACTION;
         int newTopPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * topFraction));
         int newBottomPaddingPx = Math.max(sidePaddingPx, Math.round(fullScreenHeightPx * bottomFraction));
         applyScriptPadding(newTopPaddingPx, newBottomPaddingPx);

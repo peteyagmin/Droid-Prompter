@@ -102,33 +102,40 @@ report the discrepancy before proceeding.
   leaving it at the wrong end. Operator-facing controls stay upright and
   untransformed regardless of scroll direction.
 - Flip and Rotate must clear the centered Tap to Start overlay with a
-  comfortable, non-overlapping gap, at an opening position comparable to
+  visible, non-overlapping gap below it, at an opening position that
+  should feel comparable to (or, given the choice, slightly lower than)
   normal and Flip modes' own ~77.5%-down opening; the final line settles
-  at the same ~60%-down position as normal/Flip. In
-  `applyFullScreenScriptPadding()`, reverse mode's top padding is
-  `END_SPACE_FRACTION` (governs the final-line position; unchanged), but
-  reverse mode's **bottom** padding (which governs the *opening* space,
-  since the sides are exchanged, not complemented — see below) is
-  `REVERSE_OPENING_SPACE_FRACTION` (`0.95f`), a **separately calibrated**
-  constant, not `OPENING_SPACE_FRACTION` reused. `OPENING_SPACE_FRACTION`
-  (`0.775f`) continues to govern only Mirror Off/Flip's own top padding.
-  Two prior formulas were tried and physically found wrong before this
-  one: an algebraically-derived **complement** formula (`1 -
-  OPENING_SPACE_FRACTION`/`1 - END_SPACE_FRACTION`), and a side-exchange
-  formula that reused `OPENING_SPACE_FRACTION`'s own value for the
-  exchanged bottom padding instead of calibrating a separate constant.
-  Do not reintroduce either, and do not assume `REVERSE_OPENING_SPACE_FRACTION`'s
-  current value is final, without new physical confirmation — this
-  specific geometry has needed re-calibration multiple times; treat the
-  physically observed on-screen result as authoritative over any
-  algebraic derivation. Reverse mode's target scroll position
+  at the same ~60%-down position as normal/Flip. In reverse mode, **top**
+  padding governs the *opening* position and **bottom** padding governs
+  the *end* position — physically confirmed, and structurally forced:
+  the reverse start is `scrollY == maxScroll`, and `maxScroll =
+  scriptTextHeight - viewportHeight`, so any change to bottom padding
+  changes both terms by the same amount and cancels out of the opening
+  position entirely (raising the reverse-mode bottom-padding fraction
+  from 0.775 to 0.95 was physically tested and produced **no visible
+  change** in the opening position at all). Do not assume bottom padding
+  affects the reverse-mode opening, or that top padding affects the
+  reverse-mode end — that "sides exchanged" framing was tried and
+  disproved. In `applyFullScreenScriptPadding()`, reverse-mode top
+  padding is `REVERSE_START_TOP_FRACTION` (`0.15f`, a separately
+  calibrated constant, not derived from `OPENING_SPACE_FRACTION`), and
+  reverse-mode bottom padding is `(1 - END_SPACE_FRACTION)` = `0.6`.
+  `OPENING_SPACE_FRACTION` (`0.775f`) and `END_SPACE_FRACTION` (`0.4f`)
+  are unchanged and continue to govern only Mirror Off/Flip's own
+  padding. This geometry has been revised four times on physical-testing
+  evidence (complement formula → sides-exchanged mapping →
+  `REVERSE_OPENING_SPACE_FRACTION` calibration → the current top/bottom
+  model); do not assume `REVERSE_START_TOP_FRACTION`'s current value is
+  final without new physical confirmation, and treat the physically
+  observed on-screen result as authoritative over any algebraic
+  derivation, including this one. Reverse mode's target scroll position
   (`maxScroll`) is also measurement-dependent in a way Mirror Off/Flip's
   `scrollTo(0, 0)` never is, so always reach it through
   `scrollToScriptStartReliably()` (not a direct `scrollTo()`), which
-  self-corrects once if the padding-driven re-layout hadn't
-  settled by the first measurement. This is a separate concern from the
-  padding mapping above (which side governs the opening space) — fixing
-  one does not fix the other, as this project's history shows.
+  self-corrects once if the padding-driven re-layout hadn't settled by
+  the first measurement. This is a separate concern from which side
+  governs which position — fixing one does not fix the other, as this
+  project's history shows.
 - Preview scrolling (`previewScrolling`) and full-screen scrolling
   (`UiState.SCROLLING`) must remain separate state, even though they
   share one `Handler`.
