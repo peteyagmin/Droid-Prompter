@@ -8,7 +8,10 @@ report the discrepancy before proceeding.
 
 ## Project identity
 
-- Repository: `peteyagmin/A500-Teleprompter`
+- Repository: `peteyagmin/Droid-Prompter` — the repository owner
+  renamed it on GitHub from `peteyagmin/A500-Teleprompter` (GitHub
+  redirects the old URL to the new one, so existing clones/remotes keep
+  working, but new clones and links should use the new name)
 - Current development branch: `droid-prompter` (renamed from
   `claude/android-teleprompter-app-1wfqsr` by the repository owner on
   GitHub; the old branch name no longer exists on the remote)

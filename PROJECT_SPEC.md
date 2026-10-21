@@ -108,9 +108,12 @@ Throughout this document:
 - Renamed from "A500 Teleprompter" to **Droid Prompter** (`app_name` in
   `strings.xml`) — the project explicitly anticipates running on tablets
   other than the Acer A500, and the name was always documented as a
-  working title subject to change. The repository name, branch name, and
-  Java package (`com.a500teleprompter.app`) are unrelated identifiers and
-  were not changed by this rename — see section 2.
+  working title subject to change. The Java package
+  (`com.a500teleprompter.app`) is a separate identifier, not changed by
+  this rename. The GitHub repository and the development branch *were*
+  later renamed to match (`peteyagmin/Droid-Prompter`, `droid-prompter`
+  — done by the repository owner directly on GitHub, not as part of the
+  `app_name` rename commit) — see section 2.
 
 ## 2. Current repository and release status
 

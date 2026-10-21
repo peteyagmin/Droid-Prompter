@@ -252,8 +252,13 @@ license.
 
 ## Project layout
 
+A fresh clone of the repository (now `peteyagmin/Droid-Prompter` on
+GitHub, renamed from `peteyagmin/A500-Teleprompter`) will land in a
+directory named for the new repository name; existing clones made
+before the rename keep whatever directory name they already had.
+
 ```
-A500-Teleprompter/
+Droid-Prompter/
 ├── build.gradle                  (root)
 ├── settings.gradle
 ├── gradle.properties
