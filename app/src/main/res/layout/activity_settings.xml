@@ -5,16 +5,10 @@
     android:orientation="vertical"
     android:background="@color/background_black">
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="horizontal">
-
-    <ScrollView
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="3">
+        android:layout_weight="1">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -173,57 +167,6 @@
     </ScrollView>
 
     <View
-        android:layout_width="1dp"
-        android:layout_height="match_parent"
-        android:background="@color/divider_color" />
-
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_weight="2"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="@dimen/control_padding">
-
-        <ImageView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:adjustViewBounds="true"
-            android:scaleType="fitCenter"
-            android:src="@drawable/droid_prompter_logo"
-            android:contentDescription="@string/app_name" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/app_name"
-            android:textColor="@color/text_white"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/settings_branding_copyright"
-            android:textColor="@color/text_light_gray"
-            android:textSize="13sp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:gravity="center"
-            android:text="@string/settings_branding_license"
-            android:textColor="@color/text_light_gray"
-            android:textSize="12sp" />
-
-    </LinearLayout>
-
-    </LinearLayout>
-
-    <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="@color/divider_color" />
@@ -234,6 +177,16 @@
         android:orientation="horizontal"
         android:gravity="center"
         android:padding="@dimen/control_padding">
+
+        <Button
+            android:id="@+id/btnAbout"
+            style="@style/ControlButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="200dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginRight="16dp"
+            android:text="@string/btn_about" />
 
         <Button
             android:id="@+id/btnSettingsDone"

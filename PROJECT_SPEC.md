@@ -1604,30 +1604,32 @@ redefined as a modern-Android application by any of the above.
   for API 26+, referencing `drawable-nodpi/ic_launcher_foreground.png`
   as its foreground and `@color/background_black` as a solid-color
   background — not artwork-derived).
-- As of this round, `app/src/main/res/drawable-nodpi/droid_prompter_logo.png`
-  is a direct, unmodified copy of `artwork/DroidPrompt-trans.png`,
-  renamed to a valid Android resource identifier (resource names cannot
-  contain uppercase letters or hyphens). It is referenced by
-  `activity_settings.xml`'s branding panel (section 30) as
-  `@drawable/droid_prompter_logo` — the **first** Android resource path
-  to reference either artwork file. `drawable-nodpi` (not a density
-  bucket) means Android never rescales it per-screen-density; the
-  `ImageView` itself scales it to fit its layout area via
-  `adjustViewBounds`/`scaleType="fitCenter"`.
+- `app/src/main/res/drawable-nodpi/droid_prompter_logo.png` is a direct,
+  unmodified copy of `artwork/DroidPrompt-trans.png`, renamed to a valid
+  Android resource identifier (resource names cannot contain uppercase
+  letters or hyphens). It is referenced by the Settings screen's
+  **About dialog** (`dialog_about.xml`, section 30) as `@drawable/
+  droid_prompter_logo` — the **first** Android resource path to
+  reference either artwork file. (An earlier round placed this image
+  directly on the Settings screen itself, in a split-screen branding
+  panel; that layout was reverted in favor of the About dialog — see
+  section 30 for the current design and that history.) `drawable-nodpi`
+  (not a density bucket) means Android never rescales it
+  per-screen-density; the `ImageView` itself scales it to fit its
+  layout area via `adjustViewBounds`/`scaleType="fitCenter"`.
 - These remain three different things: editable source artwork
   (`artwork/`), packaged app-icon assets (`app/src/main/res/mipmap-*`,
-  `drawable-nodpi/ic_launcher_foreground.png`), and the new packaged
-  Settings-branding image (`drawable-nodpi/droid_prompter_logo.png`).
-  Do not move the packaged mipmap/drawable-nodpi resources into
-  `artwork/`, and do not assume the reverse either — `artwork/`'s own
-  files are untouched by this round; only a renamed *copy* was added
-  under `res/`.
+  `drawable-nodpi/ic_launcher_foreground.png`), and the packaged About-
+  dialog image (`drawable-nodpi/droid_prompter_logo.png`). Do not move
+  the packaged mipmap/drawable-nodpi resources into `artwork/`, and do
+  not assume the reverse either — `artwork/`'s own files are untouched
+  by any of this; only a renamed *copy* was added under `res/`.
 - The official app name is established by `strings.xml`'s `app_name` =
-  **"Droid Prompter"** (renamed this round from "A500 Teleprompter"; see
-  section 1), used as `android:label` throughout the manifest and now
-  also echoed as the branding panel's heading text (section 30). Note
-  the exact spelling difference from the artwork filenames: the app name
-  is "Droid Prompter" (two words, with "-er"); `DroidPrompt-bg.png`/
+  **"Droid Prompter"** (renamed from "A500 Teleprompter"; see section
+  1), used as `android:label` throughout the manifest and now also
+  echoed as the About dialog's heading text (section 30). Note the
+  exact spelling difference from the artwork filenames: the app name is
+  "Droid Prompter" (two words, with "-er"); `DroidPrompt-bg.png`/
   `DroidPrompt-trans.png` spell it "DroidPrompt" (one word, no "-er") —
   these are related but not identical strings, and nothing in source
   conflates them.
@@ -1780,15 +1782,11 @@ activity_settings.xml`): a plain `Activity`, declared
 throughout, since it never calls `enterPrompterSystemUi()` or any other
 system-UI-hiding code.
 
-**Left/right split** (added this round): the screen's main content area
-is a horizontal `LinearLayout` with two children — the settings
-themselves (left, `layout_weight="3"`) and a branding panel (right,
-`layout_weight="2"`), separated by a 1dp vertical divider
-(`@color/divider_color`). This split sits inside the same overall
-vertical structure as before: it fills the space above the existing
-full-width horizontal divider and footer **Done** button row, which are
-unaffected by the split and remain full-width. Structure, top to bottom,
-left column then right column:
+A left/right split was tried in an earlier round of this work and
+**reverted** — the person found it visually unsatisfying — in favor of
+the design below: a single-column settings list, unchanged in width
+from before either round, plus a separate **About** dialog reachable
+from a new footer button. Structure, top to bottom:
 
 - A "Settings" heading (`settings_title`, 28sp bold, white).
 - **Text Alignment** section (section 31): an amber section label, then
@@ -1821,41 +1819,51 @@ left column then right column:
   toggle, or another clear control" allowance. `android.widget.Switch`
   was not used at all (never even considered a fallback need), avoiding
   the task's flagged API 14 appearance/compatibility risk entirely.
-- All of the above (the left column) sits inside its own `ScrollView`
-  (the footer button is outside it, always visible) as a defensive
-  measure for narrower screens/higher font-scale settings — the four
-  sections comfortably fit without scrolling on every device tested,
-  but nothing breaks if they ever don't.
-- **Right column** (new this round): a vertical `LinearLayout`,
-  `gravity="center"`, containing:
-  - An `ImageView` (`android:src="@drawable/droid_prompter_logo"`,
-    `adjustViewBounds="true"`, `scaleType="fitCenter"`,
-    `layout_width="match_parent"`, `layout_height="wrap_content"`) —
-    sized by the column's own weighted width, scaling proportionally
-    (the source is a square 1254×1254 PNG) rather than to any fixed dp
-    value, so it fits the available area on any screen size without
-    stretching or cropping. See section 27 for the underlying resource
-    (`drawable-nodpi/droid_prompter_logo.png`, a renamed copy of
-    `artwork/DroidPrompt-trans.png`).
-  - A `TextView` showing `@string/app_name` ("Droid Prompter", 20sp,
-    bold, white) directly below the image — reusing the same string
-    resource the app's label and title bar use, rather than a
-    duplicated literal, so a future rename only has to change one place.
-  - A `TextView` showing `settings_branding_copyright` ("Copyright ©
-    2026 Pete Yagmin", 13sp, `@color/text_light_gray`).
-  - A `TextView` showing `settings_branding_license` ("Licensed under
-    the GNU General Public License v3.0 (GPL-3.0)", 12sp,
-    `@color/text_light_gray`, `layout_width="match_parent"` with
-    `gravity="center"` so it wraps and stays centered on narrower
-    columns rather than overflowing). The repository's root `LICENSE`
-    file (added this round) contains the full GPL-3.0 text this notice
-    refers to.
-  - Nothing in this column is interactive (no click listeners, no
-    `findViewById()` calls in `SettingsActivity.java` reference it) —
-    it is purely informational branding, not a control.
-- A footer row below a full-width divider: a single **Done** button
-  (`btnSettingsDone`, `@style/ControlButton`), centered, `finish()`es
-  the Activity on click.
+- All of the above sits inside a `ScrollView` (the footer row is
+  outside it, always visible) as a defensive measure for narrower
+  screens/higher font-scale settings — the four sections comfortably
+  fit without scrolling on every device tested, but nothing breaks if
+  they ever don't.
+- A footer row below a full-width divider, now with **two** buttons
+  side by side (both `@style/ControlButton`, both `minWidth="200dp"`):
+  **About** (`btnAbout`, 16dp trailing margin) then **Done**
+  (`btnSettingsDone`, unchanged — still `finish()`es the Activity).
+
+**About dialog** (`btnAbout`'s `OnClickListener`, `SettingsActivity.
+showAboutDialog()`): a plain `AlertDialog` built with
+`setView(inflate(R.layout.dialog_about))`, `setCancelable(true)`, and a
+single `setPositiveButton(R.string.btn_close, null)` — dismissible via
+Close, Back, or tapping outside, since there is nothing to save or lose
+here (unlike every other dialog in this app, which all guard a real
+decision). `dialog_about.xml` is a self-contained vertical
+`LinearLayout` (`gravity="center"`, `background="@color/
+background_black"` so its content reads correctly regardless of the
+platform `AlertDialog` theme's own chrome) containing:
+
+- An `ImageView` (`android:src="@drawable/droid_prompter_logo"`,
+  `adjustViewBounds="true"`, `scaleType="fitCenter"`,
+  `layout_width="200dp"`) — a fixed width (unlike the reverted split's
+  weighted-column sizing) appropriate for a popup rather than a full
+  screen region; the source is a square 1254×1254 PNG, so height scales
+  proportionally with no stretching or cropping. See section 27 for the
+  underlying resource (`drawable-nodpi/droid_prompter_logo.png`, a
+  renamed copy of `artwork/DroidPrompt-trans.png`).
+- A `TextView` showing `@string/app_name` ("Droid Prompter", 20sp,
+  bold, white) directly below the image — reusing the same string
+  resource the app's label and title bar use, rather than a duplicated
+  literal, so a future rename only has to change one place.
+- A `TextView` showing `settings_branding_copyright` ("Copyright ©
+  2026 Pete Yagmin", 14sp, `@color/text_light_gray`).
+- A `TextView` showing `settings_branding_license` ("Licensed under the
+  GNU General Public License v3.0 (GPL-3.0)", 13sp,
+  `@color/text_light_gray`, `layout_width="match_parent"` with
+  `gravity="center"` so it wraps and stays centered rather than
+  overflowing the dialog's width). The repository's root `LICENSE`
+  file contains the full GPL-3.0 text this notice refers to.
+
+Nothing in the dialog is interactive beyond dismissing it — no click
+listeners on the image or text, no preferences read or written by
+`showAboutDialog()`.
 
 **Save-immediately behavior**: each control's own listener
 (`RadioGroup.OnCheckedChangeListener` ×3,
@@ -1870,12 +1878,16 @@ ever buffered in memory waiting to be saved.
 
 **Hardware status**: implemented and confirmed only by source inspection
 and a successful build — see section 26 for what has and has not been
-run on real hardware; nothing about the Settings screen itself, nor this
-round's left/right split, Mirror Mode layout change, or branding panel,
-has been physically tested as of this writing. In particular, verify on
-real hardware that the branding image renders at a reasonable size (not
-distorted, not so small it's illegible) and that the license text wraps
-without clipping at the right column's actual on-device width.
+run on real hardware; nothing about the Settings screen itself, the
+Mirror Mode layout change, the About button, or the About dialog has
+been physically tested as of this writing. In particular, verify on
+real hardware that the dialog's logo renders at a reasonable size (not
+distorted, not so small it's illegible) within a 200dp-wide `ImageView`,
+that the license text wraps without clipping at the dialog's actual
+on-device width, and that the dialog is legible against whatever the
+platform `AlertDialog` theme's own chrome looks like on that device
+(the explicit black background on `dialog_about.xml`'s root should make
+this moot, but has not been confirmed visually).
 
 ## 31. Text Alignment
 
@@ -3156,3 +3168,16 @@ a physical result the reasoning had not anticipated. Treat any *further*
 physical test result on this specific geometry as capable of overturning
 the current model too, rather than assuming round five has necessarily
 settled it.
+
+A later round found this document's Settings-screen section (30)
+describing a left/right split with a branding panel on the right — not
+a correctness bug like the ones above, but a design the person who
+requested it turned out not to like once built, and asked to have
+replaced with an About dialog instead. Recorded here because it is the
+same underlying lesson as the Flip-and-Rotate padding saga in spirit,
+even though the previous design was not factually wrong: a round
+documented as "done" on successful build and source inspection can still
+need to be undone once it is actually seen. Section 30 was rewritten in
+place for the current About-dialog design; the left/right split is kept
+only as a brief historical note there and in section 27, not described
+as current behavior.

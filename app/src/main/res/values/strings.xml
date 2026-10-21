@@ -45,6 +45,8 @@
     <string name="settings_mirror_mode_flip_rotate">Flip and Rotate</string>
     <string name="settings_section_load_last_script">Load Last Script on Launch</string>
     <string name="btn_settings_done">Done</string>
+    <string name="btn_about">About</string>
+    <string name="btn_close">Close</string>
     <string name="settings_branding_copyright">Copyright © 2026 Pete Yagmin</string>
     <string name="settings_branding_license">Licensed under the GNU General Public License v3.0 (GPL-3.0)</string>
 

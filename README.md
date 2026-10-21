@@ -140,9 +140,9 @@ difference is the most likely place to look.
 Tap the gear icon at the far right of the Font Size/Speed row to open
 Settings. Every choice saves immediately — there's no separate Save
 button, and Android Back or **Done** both return you to the main screen
-with your choice already applied. The screen is split left/right: the
-settings themselves on the left, and the app's branding (logo, name,
-copyright, and license) on the right.
+with your choice already applied. An **About** button sits next to
+Done and opens a popup with the app's logo, name, copyright, and
+license.
 
 - **Text Alignment** — Left (default) or Centered script text, in both
   the control-screen preview and every full-screen Prompter state.
@@ -260,7 +260,7 @@ A500-Teleprompter/
 ├── CLAUDE.md                     (persistent contributor rules)
 ├── PROJECT_SPEC.md               (comprehensive, source-verified behavior spec)
 ├── artwork/                      (editable source artwork: launcher icon
-│                                  and the Settings-screen branding logo)
+│                                  and the Settings screen's About-dialog logo)
 ├── app/
 │   ├── build.gradle
 │   ├── proguard-rules.pro

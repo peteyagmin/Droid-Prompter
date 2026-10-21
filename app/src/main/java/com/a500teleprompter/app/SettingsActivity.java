@@ -1,8 +1,10 @@
 package com.a500teleprompter.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -19,7 +21,9 @@ import android.widget.RadioGroup;
  * no separate Save step and no unsaved-changes state to protect on
  * Back/Done. Mirror Mode only configures the transformation the main
  * screen's existing Mirror toggle applies when On -- it never enables or
- * disables Mirror itself (see MainActivity.applyMirror()).
+ * disables Mirror itself (see MainActivity.applyMirror()). An About
+ * button opens a non-interactive informational dialog (logo, app name,
+ * copyright, GPL-3.0 notice) -- it reads no preferences and writes none.
  */
 public class SettingsActivity extends Activity {
 
@@ -40,6 +44,7 @@ public class SettingsActivity extends Activity {
         RadioButton radioMirrorModeFlip = (RadioButton) findViewById(R.id.radioMirrorModeFlip);
         RadioButton radioMirrorModeFlipRotate = (RadioButton) findViewById(R.id.radioMirrorModeFlipRotate);
         CheckBox loadLastScriptCheckBox = (CheckBox) findViewById(R.id.loadLastScriptCheckBox);
+        Button btnAbout = (Button) findViewById(R.id.btnAbout);
         Button btnDone = (Button) findViewById(R.id.btnSettingsDone);
 
         String alignment = prefs.getString(AppConstants.KEY_TEXT_ALIGNMENT, AppConstants.TEXT_ALIGNMENT_LEFT);
@@ -108,11 +113,33 @@ public class SettingsActivity extends Activity {
             }
         });
 
+        btnAbout.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showAboutDialog();
+            }
+        });
+
         btnDone.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 finish();
             }
         });
+    }
+
+    /**
+     * A non-interactive popup overlay: the app's logo, name, copyright,
+     * and GPL-3.0 license notice (dialog_about.xml). Cancelable via the
+     * Close button, Back, or tapping outside -- there is nothing to save
+     * or lose here, unlike every other dialog in this app.
+     */
+    private void showAboutDialog() {
+        View aboutView = LayoutInflater.from(this).inflate(R.layout.dialog_about, null);
+        new AlertDialog.Builder(this)
+                .setView(aboutView)
+                .setCancelable(true)
+                .setPositiveButton(R.string.btn_close, null)
+                .show();
     }
 }

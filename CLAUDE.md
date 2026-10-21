@@ -21,7 +21,7 @@ report the discrepancy before proceeding.
   is editable source material; `DroidPrompt-trans.png` is also copied
   (unmodified, only renamed to a valid resource identifier) to
   `app/src/main/res/drawable-nodpi/droid_prompter_logo.png`, referenced
-  by the Settings screen's branding panel (`@drawable/
+  by the Settings screen's **About dialog** (`@drawable/
   droid_prompter_logo`) — the first Android resource to reference either
   artwork file. "DroidPrompt" (the artwork filenames, one word) and
   "Droid Prompter" (the app name, two words) are related but distinct
@@ -29,7 +29,7 @@ report the discrepancy before proceeding.
   and still lives under `app/src/main/res/mipmap-*/` and
   `drawable-nodpi/ic_launcher_foreground.png`.
 - Licensed under GPL-3.0 (`LICENSE` at the repo root); the Settings
-  screen's branding panel displays the same license notice.
+  screen's About dialog displays the same license notice.
 - Purpose: a lightweight, offline teleprompter designed primarily to give
   older Android tablets a useful second life.
 - Original target hardware: Acer Iconia Tab A500 running Android 4.0.
@@ -267,13 +267,17 @@ report the discrepancy before proceeding.
   Alignment, Prompter Orientation, Mirror Mode, and Load Last Script on
   Launch (keys `KEY_TEXT_ALIGNMENT`/`KEY_PROMPTER_ORIENTATION`/
   `KEY_MIRROR_MODE`/`KEY_LOAD_LAST_SCRIPT` in `AppConstants`). Every
-  control saves immediately; there is no Settings-screen Save button,
-  only Done. The screen is split left (the settings, in a `ScrollView`)
-  / right (a branding panel: logo, app name, copyright, GPL-3.0 license
-  notice — non-interactive). Mirror Mode's `RadioGroup` is horizontal
-  (matching Text Alignment/Prompter Orientation), not vertical, and has
-  no explanatory text under either option — both were removed. See
-  `PROJECT_SPEC.md` sections 30–33, 35.
+  control saves immediately; there is no Settings-screen Save button —
+  the footer row has two buttons, **About** then **Done**. Mirror
+  Mode's `RadioGroup` is horizontal (matching Text Alignment/Prompter
+  Orientation), not vertical, and has no explanatory text under either
+  option — both were removed. The screen itself is a single column
+  (a left/right split with a branding panel was tried and reverted —
+  see `PROJECT_SPEC.md` section 30 for that history). **About** opens a
+  dialog (`dialog_about.xml`, inflated by `SettingsActivity.
+  showAboutDialog()`): logo, app name, copyright, GPL-3.0 license
+  notice, dismissed via Close/Back/tap-outside — non-interactive, reads
+  and writes no preferences. See `PROJECT_SPEC.md` sections 30–33, 35.
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on
   both `EditText` fields) rather than the keyboard's fullscreen extract
   editor.
