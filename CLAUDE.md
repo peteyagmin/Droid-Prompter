@@ -9,7 +9,9 @@ report the discrepancy before proceeding.
 ## Project identity
 
 - Repository: `peteyagmin/A500-Teleprompter`
-- Current development branch: `claude/android-teleprompter-app-1wfqsr`
+- Current development branch: `droid-prompter` (renamed from
+  `claude/android-teleprompter-app-1wfqsr` by the repository owner on
+  GitHub; the old branch name no longer exists on the remote)
 - Current release name: **Droid Prompter** (`app_name` in `strings.xml`;
   renamed from the earlier working title "A500 Teleprompter"), package
   `com.a500teleprompter.app`. The repository name, branch name, and Java

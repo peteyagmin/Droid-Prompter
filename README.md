@@ -5,8 +5,9 @@ useful second life — originally for the Acer Iconia Tab A500, targeting
 Android 4.0 Ice Cream Sandwich (API level 14). Plain Java, plain Android
 Views/XML layouts, no AndroidX, no Jetpack Compose, no Material
 Components, no external dependencies. The app runs on Android tablets
-other than the A500 too; this repository and its branch names still
-carry the project's original "A500 Teleprompter" working title.
+other than the A500 too; the GitHub repository name still carries the
+project's original "A500 Teleprompter" working title (the development
+branch has since been renamed to `droid-prompter`).
 
 For a comprehensive, source-verified description of every implemented
 behavior, see [`PROJECT_SPEC.md`](PROJECT_SPEC.md). For persistent rules

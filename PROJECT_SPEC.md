@@ -4,7 +4,9 @@ This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
 
 **Documented as of commit `13abf34`** (branch
-`claude/android-teleprompter-app-1wfqsr`), updated for a bug fix to the
+`claude/android-teleprompter-app-1wfqsr` at that time; the repository
+owner renamed this branch to `droid-prompter` on GitHub afterward — see
+section 2), updated for a bug fix to the
 Mirror On + Flip and Rotate setting introduced at that commit (section
 35): Flip and Rotate's 180-degree rotation was found to make Preview and
 full-screen Prompter scrolling start at the end of the script and run
@@ -112,9 +114,16 @@ Throughout this document:
 
 ## 2. Current repository and release status
 
-- Branch: `claude/android-teleprompter-app-1wfqsr`.
+- Branch: `droid-prompter` — renamed by the repository owner on GitHub
+  from this branch's original name, `claude/android-teleprompter-app-
+  1wfqsr`; the old name no longer exists on the remote, and every local
+  clone's branch and upstream tracking must be renamed to match (`git
+  branch -m <old> droid-prompter` then re-pointing the upstream), not
+  left pointing at a deleted remote ref.
 - HEAD at documentation time: `66d459f` ("Fix Save button text size to
-  match Cancel in script editor").
+  match Cancel in script editor") — stale; many commits have landed
+  since without this line being updated every round. Treat `git log`
+  as authoritative over this line specifically.
 - Application label (`android:label` on `<application>` and
   `MainActivity`): `@string/app_name` = **Droid Prompter**.
 - Package / `applicationId`: `com.a500teleprompter.app` — unchanged by
@@ -126,9 +135,16 @@ Throughout this document:
   — produced by `build.sh`, **not** committed to the repository
   (`/app/build/` is in `.gitignore`). It must be rebuilt from source.
 - `versionCode 1`, `versionName "1.0"` (`app/build.gradle`), unchanged
-  since project inception. No beta/release designation, changelog, or
-  git tag exists in the repository (`git tag` is currently empty) — see
-  section 29 for the intended (not yet practiced) discipline.
+  since project inception. A `v1.0.0` tag now exists in the repository,
+  pointing at commit `4d9495c` (the "Replace Settings screen's branding
+  panel with an About popup dialog" commit) — created outside this
+  session, not by any task reported here. This does not necessarily
+  mean `versionCode`/`versionName` were bumped to match (they were not,
+  as of this writing); don't assume the Gradle version fields track git
+  tags automatically, or that a tag's presence means a corresponding
+  Gradle version change was made. No changelog exists. See section 29
+  for the intended discipline, now partially practiced (a tag exists)
+  rather than not at all.
 
 ## 3. Supported Android configuration
 
@@ -1650,9 +1666,10 @@ to present these as current functionality:
 
 ## 29. Change and release discipline
 
-Intended practice going forward (not yet practiced in this repository's
-history — no tags exist yet, and there is no prior tagged known-good
-release to point to):
+Intended practice going forward. A `v1.0.0` tag now exists (section 2),
+created outside this session's own tasks, so this is no longer entirely
+unpracticed — but it is the only tag, there is no changelog, and no
+other part of the discipline below has been demonstrated yet:
 
 - Tag known-good releases once a version has been verified (build +
   signature/zipalign checks, and ideally hardware testing) so there is a
