@@ -10,15 +10,26 @@ report the discrepancy before proceeding.
 
 - Repository: `peteyagmin/A500-Teleprompter`
 - Current development branch: `claude/android-teleprompter-app-1wfqsr`
-- Current release name: **A500 Teleprompter** (`app_name` in
-  `strings.xml`, package `com.a500teleprompter.app`)
-- The name is a working title and may change; the app runs on Android
-  tablets other than the Acer A500.
+- Current release name: **Droid Prompter** (`app_name` in `strings.xml`;
+  renamed from the earlier working title "A500 Teleprompter"), package
+  `com.a500teleprompter.app`. The repository name, branch name, and Java
+  package are unrelated identifiers and were not renamed along with the
+  app name — do not assume they track it.
+- The name may change again; the app runs on Android tablets other than
+  the Acer A500.
 - Artwork under `artwork/` (`DroidPrompt-bg.png`, `DroidPrompt-trans.png`)
-  is source material only. It is **not** referenced by any Android
-  resource and does not establish "DroidPrompt" as the app name. The
-  packaged launcher icon lives under `app/src/main/res/mipmap-*/` and
+  is editable source material; `DroidPrompt-trans.png` is also copied
+  (unmodified, only renamed to a valid resource identifier) to
+  `app/src/main/res/drawable-nodpi/droid_prompter_logo.png`, referenced
+  by the Settings screen's branding panel (`@drawable/
+  droid_prompter_logo`) — the first Android resource to reference either
+  artwork file. "DroidPrompt" (the artwork filenames, one word) and
+  "Droid Prompter" (the app name, two words) are related but distinct
+  strings; don't conflate them. The packaged launcher icon is unrelated
+  and still lives under `app/src/main/res/mipmap-*/` and
   `drawable-nodpi/ic_launcher_foreground.png`.
+- Licensed under GPL-3.0 (`LICENSE` at the repo root); the Settings
+  screen's branding panel displays the same license notice.
 - Purpose: a lightweight, offline teleprompter designed primarily to give
   older Android tablets a useful second life.
 - Original target hardware: Acer Iconia Tab A500 running Android 4.0.
@@ -257,7 +268,12 @@ report the discrepancy before proceeding.
   Launch (keys `KEY_TEXT_ALIGNMENT`/`KEY_PROMPTER_ORIENTATION`/
   `KEY_MIRROR_MODE`/`KEY_LOAD_LAST_SCRIPT` in `AppConstants`). Every
   control saves immediately; there is no Settings-screen Save button,
-  only Done. See `PROJECT_SPEC.md` sections 30–33, 35.
+  only Done. The screen is split left (the settings, in a `ScrollView`)
+  / right (a branding panel: logo, app name, copyright, GPL-3.0 license
+  notice — non-interactive). Mirror Mode's `RadioGroup` is horizontal
+  (matching Text Alignment/Prompter Orientation), not vertical, and has
+  no explanatory text under either option — both were removed. See
+  `PROJECT_SPEC.md` sections 30–33, 35.
 - The Script Editor uses inline keyboard editing (`flagNoExtractUi` on
   both `EditText` fields) rather than the keyboard's fullscreen extract
   editor.

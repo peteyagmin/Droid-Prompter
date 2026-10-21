@@ -1,5 +1,5 @@
 #!/bin/bash
-# Manual build script for A500 Teleprompter.
+# Manual build script for Droid Prompter.
 #
 # This project is a normal Gradle/Android-Gradle-Plugin project and should
 # normally be built with:

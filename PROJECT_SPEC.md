@@ -1,4 +1,4 @@
-# A500 Teleprompter — Project Specification
+# Droid Prompter — Project Specification
 
 This document describes the application as it exists in the current
 source. See `CLAUDE.md` for the persistent rules derived from it.
@@ -103,9 +103,12 @@ Throughout this document:
   tablets a useful second life rather than a general-purpose modern app.
 - Fully offline: no accounts, no ads, no analytics, no cloud services, no
   network access of any kind (no `INTERNET` permission is requested).
-- "A500 Teleprompter" is a working title; the project explicitly
-  anticipates running on tablets other than the Acer A500 and the name
-  may change.
+- Renamed from "A500 Teleprompter" to **Droid Prompter** (`app_name` in
+  `strings.xml`) — the project explicitly anticipates running on tablets
+  other than the Acer A500, and the name was always documented as a
+  working title subject to change. The repository name, branch name, and
+  Java package (`com.a500teleprompter.app`) are unrelated identifiers and
+  were not changed by this rename — see section 2.
 
 ## 2. Current repository and release status
 
@@ -113,8 +116,12 @@ Throughout this document:
 - HEAD at documentation time: `66d459f` ("Fix Save button text size to
   match Cancel in script editor").
 - Application label (`android:label` on `<application>` and
-  `MainActivity`): `@string/app_name` = **A500 Teleprompter**.
-- Package / `applicationId`: `com.a500teleprompter.app`.
+  `MainActivity`): `@string/app_name` = **Droid Prompter**.
+- Package / `applicationId`: `com.a500teleprompter.app` — unchanged by
+  the app-name rename above; renaming the Java package is a separate,
+  much more invasive change (affects APK signing/upgrade identity,
+  `SharedPreferences` file naming, and every source file's package
+  declaration) that was not requested and was not made.
 - Latest known APK output path: `app/build/outputs/apk/debug/app-debug.apk`
   — produced by `build.sh`, **not** committed to the repository
   (`/app/build/` is in `.gitignore`). It must be rebuilt from source.
@@ -1586,25 +1593,44 @@ redefined as a modern-Android application by any of the above.
 
 - Source artwork lives under `artwork/`: `DroidPrompt-bg.png` (solid
   background variant) and `DroidPrompt-trans.png` (transparent
-  background variant). Neither file is referenced by any Android
-  resource path — they are editable source material only, not packaged
-  into the APK directly.
-- The actual packaged launcher icon resources are under
-  `app/src/main/res/mipmap-{hdpi,mdpi,xhdpi,xxhdpi,xxxhdpi}/
+  background variant). Both are 1254×1254 PNGs (the `-trans` variant is
+  RGBA with an alpha channel; `-bg` is opaque RGB). Neither original
+  file is referenced by any Android resource path directly — they
+  remain editable source material, not packaged into the APK as-is.
+- The packaged **launcher icon** resources are, unchanged by this round,
+  under `app/src/main/res/mipmap-{hdpi,mdpi,xhdpi,xxhdpi,xxxhdpi}/
   ic_launcher.png` (legacy, pre-API-26 icon) and
   `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` (an adaptive icon
   for API 26+, referencing `drawable-nodpi/ic_launcher_foreground.png`
   as its foreground and `@color/background_black` as a solid-color
   background — not artwork-derived).
-- These are two different things: editable source artwork (`artwork/`)
-  versus packaged, resource-referenced app icon assets
-  (`app/src/main/res/mipmap-*`, `drawable-nodpi/`). Do not move the
-  packaged mipmap/drawable-nodpi resources into `artwork/`, and do not
-  assume the reverse either.
+- As of this round, `app/src/main/res/drawable-nodpi/droid_prompter_logo.png`
+  is a direct, unmodified copy of `artwork/DroidPrompt-trans.png`,
+  renamed to a valid Android resource identifier (resource names cannot
+  contain uppercase letters or hyphens). It is referenced by
+  `activity_settings.xml`'s branding panel (section 30) as
+  `@drawable/droid_prompter_logo` — the **first** Android resource path
+  to reference either artwork file. `drawable-nodpi` (not a density
+  bucket) means Android never rescales it per-screen-density; the
+  `ImageView` itself scales it to fit its layout area via
+  `adjustViewBounds`/`scaleType="fitCenter"`.
+- These remain three different things: editable source artwork
+  (`artwork/`), packaged app-icon assets (`app/src/main/res/mipmap-*`,
+  `drawable-nodpi/ic_launcher_foreground.png`), and the new packaged
+  Settings-branding image (`drawable-nodpi/droid_prompter_logo.png`).
+  Do not move the packaged mipmap/drawable-nodpi resources into
+  `artwork/`, and do not assume the reverse either — `artwork/`'s own
+  files are untouched by this round; only a renamed *copy* was added
+  under `res/`.
 - The official app name is established by `strings.xml`'s `app_name` =
-  "A500 Teleprompter", used as `android:label` throughout the manifest.
-  Nothing in the current source treats "DroidPrompt" as the application
-  name; it only appears in the two artwork filenames.
+  **"Droid Prompter"** (renamed this round from "A500 Teleprompter"; see
+  section 1), used as `android:label` throughout the manifest and now
+  also echoed as the branding panel's heading text (section 30). Note
+  the exact spelling difference from the artwork filenames: the app name
+  is "Droid Prompter" (two words, with "-er"); `DroidPrompt-bg.png`/
+  `DroidPrompt-trans.png` spell it "DroidPrompt" (one word, no "-er") —
+  these are related but not identical strings, and nothing in source
+  conflates them.
 
 ## 28. Known limitations and future ideas
 
@@ -1616,8 +1642,6 @@ to present these as current functionality:
   in source).
 - A separate modern-Android-targeted build (only one `build.gradle`
   target exists, `minSdkVersion`/`targetSdkVersion` 14).
-- Changing the final product name away from "A500 Teleprompter" (it
-  remains a working title, but no rename has been made in source).
 - Hardware verification of the compact-editing-mode UI refinements
   described in section 11/25 — implemented and compiled, not yet
   confirmed on a physical device since being added.
@@ -1754,7 +1778,17 @@ activity_settings.xml`): a plain `Activity`, declared
 `FileBrowserActivity`/`ScriptEditorActivity`), using the Application's
 `@style/AppTheme` unchanged — normal Android status and navigation bars
 throughout, since it never calls `enterPrompterSystemUi()` or any other
-system-UI-hiding code. Structure, top to bottom:
+system-UI-hiding code.
+
+**Left/right split** (added this round): the screen's main content area
+is a horizontal `LinearLayout` with two children — the settings
+themselves (left, `layout_weight="3"`) and a branding panel (right,
+`layout_weight="2"`), separated by a 1dp vertical divider
+(`@color/divider_color`). This split sits inside the same overall
+vertical structure as before: it fills the space above the existing
+full-width horizontal divider and footer **Done** button row, which are
+unaffected by the split and remain full-width. Structure, top to bottom,
+left column then right column:
 
 - A "Settings" heading (`settings_title`, 28sp bold, white).
 - **Text Alignment** section (section 31): an amber section label, then
@@ -1768,17 +1802,18 @@ system-UI-hiding code. Structure, top to bottom:
   `radioOrientationVertical` ("Vertical").
 - Another divider.
 - **Mirror Mode** section (section 35): the same section-label style,
-  then a *vertical* `RadioGroup` (`mirrorModeGroup`, unlike the two
-  horizontal ones above) with `radioMirrorModeFlip` ("Flip") and
-  `radioMirrorModeFlipRotate` ("Flip and Rotate"), each immediately
-  followed by its own small gray explanatory `TextView`
-  (`settings_mirror_mode_flip_description` /
-  `settings_mirror_mode_flip_rotate_description`, 13sp,
-  `@color/text_light_gray`, indented 36dp to sit under the option's own
-  text rather than its radio circle) — plain `TextView`s interleaved
-  inside the `RadioGroup`, which only manages the check-state of its
-  `RadioButton` children and otherwise behaves as an ordinary vertical
-  `LinearLayout`.
+  then — as of this round — a *horizontal* `RadioGroup`
+  (`mirrorModeGroup`, matching Text Alignment/Prompter Orientation's
+  layout exactly, including the same `paddingRight`/`paddingEnd`
+  "24dp" on the first `RadioButton`) with `radioMirrorModeFlip`
+  ("Flip") and `radioMirrorModeFlipRotate` ("Flip and Rotate"). The
+  explanatory `TextView`s that used to sit under each option
+  (`settings_mirror_mode_flip_description` = "Standard teleprompter-
+  glass display", `settings_mirror_mode_flip_rotate_description` =
+  "Use when the tablet is mounted with the controls upright") were
+  removed from the layout, and both strings were deleted from
+  `strings.xml` entirely as now-unused resources — this section no
+  longer differs in layout shape from the two sections above it.
 - Another divider.
 - **Load Last Script on Launch** (section 33): a single `CheckBox`
   (`loadLastScriptCheckBox`), not a `RadioGroup` — simplest correct
@@ -1786,11 +1821,38 @@ system-UI-hiding code. Structure, top to bottom:
   toggle, or another clear control" allowance. `android.widget.Switch`
   was not used at all (never even considered a fallback need), avoiding
   the task's flagged API 14 appearance/compatibility risk entirely.
-- All of the above sits inside a `ScrollView` (the footer button is
-  outside it, always visible) as a defensive measure for narrower
-  screens/higher font-scale settings — the three sections comfortably
-  fit without scrolling on every device tested, but nothing breaks if
-  they ever don't.
+- All of the above (the left column) sits inside its own `ScrollView`
+  (the footer button is outside it, always visible) as a defensive
+  measure for narrower screens/higher font-scale settings — the four
+  sections comfortably fit without scrolling on every device tested,
+  but nothing breaks if they ever don't.
+- **Right column** (new this round): a vertical `LinearLayout`,
+  `gravity="center"`, containing:
+  - An `ImageView` (`android:src="@drawable/droid_prompter_logo"`,
+    `adjustViewBounds="true"`, `scaleType="fitCenter"`,
+    `layout_width="match_parent"`, `layout_height="wrap_content"`) —
+    sized by the column's own weighted width, scaling proportionally
+    (the source is a square 1254×1254 PNG) rather than to any fixed dp
+    value, so it fits the available area on any screen size without
+    stretching or cropping. See section 27 for the underlying resource
+    (`drawable-nodpi/droid_prompter_logo.png`, a renamed copy of
+    `artwork/DroidPrompt-trans.png`).
+  - A `TextView` showing `@string/app_name` ("Droid Prompter", 20sp,
+    bold, white) directly below the image — reusing the same string
+    resource the app's label and title bar use, rather than a
+    duplicated literal, so a future rename only has to change one place.
+  - A `TextView` showing `settings_branding_copyright` ("Copyright ©
+    2026 Pete Yagmin", 13sp, `@color/text_light_gray`).
+  - A `TextView` showing `settings_branding_license` ("Licensed under
+    the GNU General Public License v3.0 (GPL-3.0)", 12sp,
+    `@color/text_light_gray`, `layout_width="match_parent"` with
+    `gravity="center"` so it wraps and stays centered on narrower
+    columns rather than overflowing). The repository's root `LICENSE`
+    file (added this round) contains the full GPL-3.0 text this notice
+    refers to.
+  - Nothing in this column is interactive (no click listeners, no
+    `findViewById()` calls in `SettingsActivity.java` reference it) —
+    it is purely informational branding, not a control.
 - A footer row below a full-width divider: a single **Done** button
   (`btnSettingsDone`, `@style/ControlButton`), centered, `finish()`es
   the Activity on click.
@@ -1808,8 +1870,12 @@ ever buffered in memory waiting to be saved.
 
 **Hardware status**: implemented and confirmed only by source inspection
 and a successful build — see section 26 for what has and has not been
-run on real hardware; nothing about the Settings screen itself has been
-physically tested as of this writing.
+run on real hardware; nothing about the Settings screen itself, nor this
+round's left/right split, Mirror Mode layout change, or branding panel,
+has been physically tested as of this writing. In particular, verify on
+real hardware that the branding image renders at a reasonable size (not
+distorted, not so small it's illegible) and that the license text wraps
+without clipping at the right column's actual on-device width.
 
 ## 31. Text Alignment
 

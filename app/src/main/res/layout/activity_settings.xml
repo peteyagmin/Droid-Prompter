@@ -5,10 +5,16 @@
     android:orientation="vertical"
     android:background="@color/background_black">
 
-    <ScrollView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="3">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -123,7 +129,7 @@
                 android:id="@+id/mirrorModeGroup"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:layout_marginTop="8dp">
 
                 <RadioButton
@@ -132,17 +138,9 @@
                     android:layout_height="wrap_content"
                     android:text="@string/settings_mirror_mode_flip"
                     android:textColor="@color/text_white"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="36dp"
-                    android:layout_marginLeft="36dp"
-                    android:layout_marginBottom="8dp"
-                    android:text="@string/settings_mirror_mode_flip_description"
-                    android:textColor="@color/text_light_gray"
-                    android:textSize="13sp" />
+                    android:textSize="16sp"
+                    android:paddingRight="24dp"
+                    android:paddingEnd="24dp" />
 
                 <RadioButton
                     android:id="@+id/radioMirrorModeFlipRotate"
@@ -151,15 +149,6 @@
                     android:text="@string/settings_mirror_mode_flip_rotate"
                     android:textColor="@color/text_white"
                     android:textSize="16sp" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="36dp"
-                    android:layout_marginLeft="36dp"
-                    android:text="@string/settings_mirror_mode_flip_rotate_description"
-                    android:textColor="@color/text_light_gray"
-                    android:textSize="13sp" />
             </RadioGroup>
 
             <View
@@ -182,6 +171,57 @@
 
         </LinearLayout>
     </ScrollView>
+
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="@color/divider_color" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="2"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="@dimen/control_padding">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/droid_prompter_logo"
+            android:contentDescription="@string/app_name" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/app_name"
+            android:textColor="@color/text_white"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/settings_branding_copyright"
+            android:textColor="@color/text_light_gray"
+            android:textSize="13sp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="@string/settings_branding_license"
+            android:textColor="@color/text_light_gray"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    </LinearLayout>
 
     <View
         android:layout_width="match_parent"

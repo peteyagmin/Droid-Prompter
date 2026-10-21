@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">A500 Teleprompter</string>
+    <string name="app_name">Droid Prompter</string>
     <string name="file_browser_title">Choose Script File</string>
 
     <!-- Main screen -->
@@ -42,11 +42,11 @@
     <string name="settings_orientation_vertical">Vertical</string>
     <string name="settings_section_mirror_mode">Mirror Mode</string>
     <string name="settings_mirror_mode_flip">Flip</string>
-    <string name="settings_mirror_mode_flip_description">Standard teleprompter-glass display</string>
     <string name="settings_mirror_mode_flip_rotate">Flip and Rotate</string>
-    <string name="settings_mirror_mode_flip_rotate_description">Use when the tablet is mounted with the controls upright</string>
     <string name="settings_section_load_last_script">Load Last Script on Launch</string>
     <string name="btn_settings_done">Done</string>
+    <string name="settings_branding_copyright">Copyright © 2026 Pete Yagmin</string>
+    <string name="settings_branding_license">Licensed under the GNU General Public License v3.0 (GPL-3.0)</string>
 
     <!-- Script editor -->
     <string name="script_editor_title">Script Editor</string>

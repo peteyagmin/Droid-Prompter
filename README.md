@@ -1,15 +1,18 @@
-# A500 Teleprompter
+# Droid Prompter
 
 A lightweight teleprompter app built to give older Android tablets a
 useful second life — originally for the Acer Iconia Tab A500, targeting
 Android 4.0 Ice Cream Sandwich (API level 14). Plain Java, plain Android
 Views/XML layouts, no AndroidX, no Jetpack Compose, no Material
-Components, no external dependencies. "A500 Teleprompter" is a working
-title; the app runs on Android tablets other than the A500 too.
+Components, no external dependencies. The app runs on Android tablets
+other than the A500 too; this repository and its branch names still
+carry the project's original "A500 Teleprompter" working title.
 
 For a comprehensive, source-verified description of every implemented
 behavior, see [`PROJECT_SPEC.md`](PROJECT_SPEC.md). For persistent rules
 this project is developed under, see [`CLAUDE.md`](CLAUDE.md).
+
+Licensed under the [GNU General Public License v3.0](LICENSE).
 
 ## Features
 
@@ -137,7 +140,9 @@ difference is the most likely place to look.
 Tap the gear icon at the far right of the Font Size/Speed row to open
 Settings. Every choice saves immediately — there's no separate Save
 button, and Android Back or **Done** both return you to the main screen
-with your choice already applied.
+with your choice already applied. The screen is split left/right: the
+settings themselves on the left, and the app's branding (logo, name,
+copyright, and license) on the right.
 
 - **Text Alignment** — Left (default) or Centered script text, in both
   the control-screen preview and every full-screen Prompter state.
@@ -153,11 +158,11 @@ with your choice already applied.
   loaded script, its position, and your other settings are all
   preserved through that.
 - **Mirror Mode** — Flip (default, the app's original mirrored display)
-  or Flip and Rotate. This only determines what the main screen's
-  Mirror toggle does while it's On; it doesn't turn Mirror on or off
-  itself. Flip and Rotate is intended for mounting the tablet with the
-  operator's controls upright and readable, while the reflected
-  presenter-facing content stays correctly oriented.
+  or Flip and Rotate, shown as two side-by-side radio buttons. This only
+  determines what the main screen's Mirror toggle does while it's On; it
+  doesn't turn Mirror on or off itself. Flip and Rotate is intended for
+  mounting the tablet with the operator's controls upright and readable,
+  while the reflected presenter-facing content stays correctly oriented.
 - **Load Last Script on Launch** — On (default, the app's original
   behavior) automatically reopens the last script you had loaded each
   time you start the app. Off starts every launch with no script loaded
@@ -254,7 +259,8 @@ A500-Teleprompter/
 ├── build.sh                      (manual/offline build fallback, see below)
 ├── CLAUDE.md                     (persistent contributor rules)
 ├── PROJECT_SPEC.md               (comprehensive, source-verified behavior spec)
-├── artwork/                      (editable source launcher-icon artwork)
+├── artwork/                      (editable source artwork: launcher icon
+│                                  and the Settings-screen branding logo)
 ├── app/
 │   ├── build.gradle
 │   ├── proguard-rules.pro
@@ -552,3 +558,15 @@ list, let us know so it can be added.
 - If the containing folder itself reports as unreadable (permissions),
   the browser shows a friendly error rather than a crash — check the
   folder's permissions with a shell if this happens.
+
+## License
+
+Droid Prompter is free software: you can redistribute it and/or modify
+it under the terms of the [GNU General Public License v3.0](LICENSE) as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. It is distributed in
+the hope that it will be useful, but WITHOUT ANY WARRANTY — see the
+license text for the full disclaimer. The same notice is shown on the
+app's own Settings screen.
+
+Copyright (C) 2026 Pete Yagmin.
